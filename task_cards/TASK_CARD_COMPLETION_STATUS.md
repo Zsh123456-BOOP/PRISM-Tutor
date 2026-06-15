@@ -27,7 +27,7 @@
 
 - [x] 本机 `python -m compileall prism_tutor scripts data serving tests`
 - [x] 本机 `python -m pytest -q`，结果：65 passed。
-- [x] 服务器 `python -m pytest -q`，结果：63 passed。
+- [x] 服务器 `python -m pytest -q`，结果：65 passed。
 - [x] `python scripts/00_prepare_env_check.py --config configs/default.yaml --dry-run`
 - [x] `python scripts/01_build_datasets.py --help`
 - [x] `bash serving/start_vllm_gpu0.sh`
@@ -57,7 +57,7 @@
 - [x] Full-run finalization gate：`scripts/12_finalize_full_run.py --allow-incomplete --dry-run` 已在服务器真实 shard plan 上验证，默认不调用 judge，计划步骤为 auto metrics、tables、figures、human audit sample、paper artifacts；manifest/stdout 会输出 `completed_jobs`、`total_jobs`、`can_finalize`、`planned_steps`。
 - [x] Paper artifact run-local path gate：`scripts/09_export_paper_artifacts.py --artifact-prefix outputs/full_run` 可让 reproducibility checklist 和 artifact index 检查 full-run 目录，而不是误查全局 `outputs/*`。
 - [x] Shard progress report：`python scripts/11_plan_or_run_shards.py progress --plan outputs/full_run/shard_plan.json --supervisor-log outputs/full_run/logs/shards/supervisor_compact.jsonl --rate-window 5` 已在服务器验证，health summary 当前为 `ok`，并记录 `target_running`。
-- [x] 正式 full_run 后台运行：已完成 46 个 shard，18 个 shard 正在 running；最近检查 generation_rows `5110`、error_rows `0`，近期吞吐约 `87.49` rows/min，粗略 ETA 约 `37.96` hours，GPU2/GPU3 均 100% utilization，health summary 为 `ok`。
+- [x] 正式 full_run 后台运行：已完成 46 个 shard，18 个 shard 正在 running；最近检查 generation_rows `5243`、error_rows `0`，近期吞吐约 `87.83` rows/min，粗略 ETA 约 `37.79` hours，GPU2/GPU3 均 100% utilization，health summary 为 `ok`。
 
 ## 仍需服务器真实执行的项目
 
