@@ -7,7 +7,7 @@
 ## 已完成的代码路径
 
 - [x] 01 项目初始化与复现规范：`configs/`、`environment.yml`、`requirements.txt`、`pyproject.toml`、复现 metadata、`.gitignore`；experiment manifest 带 `schema_version`、audit block、config snapshot、input/output paths、duration 和 CUDA/VLLM env metadata。
-- [x] 02 环境检查：`scripts/00_prepare_env_check.py` 可生成 env check report。
+- [x] 02 环境检查：`scripts/00_prepare_env_check.py` 可生成 env check report，包含 CUDA version、GPU count、CUDA_VISIBLE_DEVICES conflict、warnings/errors 和缺失依赖 fallback suggestions。
 - [x] 03 Qwen3-8B vLLM 服务配置：`serving/start_vllm_*.sh`、`serving/health_check.py` dry-run 与服务器 live health check 可用。
 - [x] 04 数据 schema 与 split：`scripts/01_build_datasets.py`、`prism_tutor/data/` 支持本地 raw JSON/JSONL/CSV；MathDial、Bridge、MaE Misconception loader 已按真实源格式验证。
 - [x] 05 Agent schema 与 base client：`prism_tutor/agents/schemas.py`、mock-safe OpenAI-compatible client，支持 endpoint-specific served model name 与 retryable HTTP/timeout request retry。
@@ -26,7 +26,7 @@
 ## 已验证命令
 
 - [x] 本机 `python -m compileall prism_tutor scripts data serving tests`
-- [x] 本机 `python -m pytest -q`，结果：88 passed。
+- [x] 本机 `python -m pytest -q`，结果：89 passed。
 - [x] 服务器 `python -m pytest -q`，结果：88 passed。
 - [x] `python scripts/00_prepare_env_check.py --config configs/default.yaml --dry-run`
 - [x] `python scripts/01_build_datasets.py --help`
