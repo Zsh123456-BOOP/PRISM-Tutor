@@ -28,7 +28,7 @@ def _generation_config(config: dict[str, Any]) -> dict[str, Any]:
         "temperature": generation.get("temperature", 0.2),
         "top_p": generation.get("top_p", 0.8),
         "max_tokens": generation.get("max_tokens", {}).get("verifier", 128),
-        "extra_body": {"enable_thinking": bool(model.get("enable_thinking", False))},
+        "chat_template_kwargs": {"enable_thinking": bool(model.get("enable_thinking", False))},
     }
 
 

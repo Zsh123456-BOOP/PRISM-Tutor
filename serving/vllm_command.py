@@ -63,6 +63,10 @@ def build_vllm_command(config: dict[str, Any], profile: str) -> tuple[dict[str, 
         max_model_len,
         "--gpu-memory-utilization",
         gpu_memory_utilization,
+        "--generation-config",
+        "vllm",
+        "--default-chat-template-kwargs",
+        '{"enable_thinking": false}',
     ]
     if profile == "tp2":
         command.extend(["--tensor-parallel-size", str(config.get("tensor_parallel_size", 2))])
