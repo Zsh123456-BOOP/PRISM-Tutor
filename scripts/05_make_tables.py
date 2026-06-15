@@ -85,7 +85,7 @@ def main() -> int:
             ("ours_routing_budget", "difficulty_routing"),
         ]:
             comparisons.append(compare_methods(rows, metric, a, b, binary=metric == "rule_leakage"))
-    write_json(Path("outputs/metrics/significance_tests.json"), holm_correction(comparisons))
+    write_json(record_path.parent / "significance_tests.json", holm_correction(comparisons))
     print(json.dumps({"rows": len(rows), "table_rows": len(table), "output_dir": str(out)}, indent=2))
     return 0
 
