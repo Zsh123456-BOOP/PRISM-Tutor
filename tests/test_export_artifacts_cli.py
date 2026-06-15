@@ -43,3 +43,42 @@ def test_export_cli_allows_failed_checklist_only_for_smoke(tmp_path: Path, capsy
     payload = json.loads(captured.out)
     assert rc == 0
     assert payload["status"] == "failed"
+
+
+def test_export_cli_fails_when_explicit_shard_plan_is_missing(tmp_path: Path) -> None:
+    try:
+        export_script.main(
+            [
+                "--root",
+                str(tmp_path),
+                "--output_dir",
+                str(tmp_path / "paper_artifacts"),
+                "--shard-plan",
+                str(tmp_path / "missing_plan.json"),
+            ]
+        )
+    except SystemExit as exc:
+        assert "Missing shard plan" in str(exc)
+    else:
+        raise AssertionError("Expected missing shard plan to fail")
+
+
+def test_export_cli_fails_when_explicit_shard_plan_is_invalid(tmp_path: Path) -> None:
+    bad_plan = tmp_path / "bad_plan.json"
+    bad_plan.write_text("{not json", encoding="utf-8")
+
+    try:
+        export_script.main(
+            [
+                "--root",
+                str(tmp_path),
+                "--output_dir",
+                str(tmp_path / "paper_artifacts"),
+                "--shard-plan",
+                str(bad_plan),
+            ]
+        )
+    except SystemExit as exc:
+        assert "Invalid shard plan JSON" in str(exc)
+    else:
+        raise AssertionError("Expected invalid shard plan to fail")

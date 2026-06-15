@@ -167,17 +167,52 @@ def _load_experiments_config(root: Path, config_path: Any) -> dict[str, Any]:
 
 def build_artifact_index(root: Path, artifact_prefix: str = DEFAULT_ARTIFACT_PREFIX) -> str:
     prefix = artifact_prefix.rstrip("/")
-    entries = [
-        (f"{prefix}/tables", "scripts/05_make_tables.py", f"{prefix}/metrics/*.csv and judge scores"),
-        (f"{prefix}/figures", "scripts/06_make_figures.py", f"{prefix}/metrics/*.csv and experiment manifest"),
-        (f"{prefix}/metrics/significance_tests.json", "prism_tutor.eval.significance", "paired metric rows"),
-        (f"{prefix}/human_audit", "scripts/07_sample_human_audit.py and scripts/08_human_agreement.py", "judge, metrics, tables"),
-    ]
+    entries = [(rel, _artifact_source(rel, prefix), _artifact_inputs(rel, prefix)) for rel in default_required_paths(prefix)]
     lines = ["# Artifact Index", ""]
     for rel, source_script, inputs in entries:
         status = "present" if (root / rel).exists() else "missing"
         lines.append(f"- `{rel}`: {status}; source `{source_script}`; inputs {inputs}")
     return "\n".join(lines) + "\n"
+
+
+def _artifact_source(rel: str, prefix: str) -> str:
+    if "/tables/" in rel or rel.endswith("/tables"):
+        return "scripts/05_make_tables.py"
+    if "/figures/" in rel or rel.endswith("/figures"):
+        return "scripts/06_make_figures.py"
+    if rel.endswith("significance_tests.json"):
+        return "prism_tutor.eval.significance"
+    if "/human_audit/" in rel or rel.endswith("/human_audit"):
+        return "scripts/07_sample_human_audit.py and scripts/08_human_agreement.py"
+    if "/judge_scores/" in rel:
+        return "scripts/03_run_judge.py"
+    if rel.endswith("/metrics") or "/metrics/" in rel:
+        return "scripts/04_compute_metrics.py"
+    if rel.endswith("/generations"):
+        return "scripts/02_run_generation.py"
+    if rel.endswith("/logs"):
+        return "prism_tutor.logging"
+    return prefix
+
+
+def _artifact_inputs(rel: str, prefix: str) -> str:
+    if "/tables/" in rel or rel.endswith("/tables"):
+        return f"{prefix}/metrics/record_auto_metrics.jsonl and {prefix}/judge_scores/judge_scores.jsonl"
+    if "/figures/" in rel or rel.endswith("/figures"):
+        return f"{prefix}/metrics/record_auto_metrics.jsonl"
+    if rel.endswith("significance_tests.json"):
+        return f"{prefix}/metrics/record_auto_metrics.jsonl"
+    if "/human_audit/" in rel or rel.endswith("/human_audit"):
+        return f"{prefix}/metrics, {prefix}/generations, {prefix}/judge_scores, {prefix}/tables"
+    if "/judge_scores/" in rel:
+        return f"{prefix}/generations and configs/judge.yaml"
+    if rel.endswith("/metrics") or "/metrics/" in rel:
+        return f"{prefix}/generations, data/splits, {prefix}/judge_scores"
+    if rel.endswith("/generations"):
+        return "configs/experiments.yaml and data/splits"
+    if rel.endswith("/logs"):
+        return "all run scripts"
+    return "repository files"
 
 
 def build_experiment_summary(manifest: dict[str, Any], checklist: dict[str, Any], artifact_index: str) -> str:

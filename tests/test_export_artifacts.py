@@ -214,6 +214,11 @@ def test_export_paper_artifacts_uses_run_local_artifact_prefix(tmp_path):
     artifact_index = files["artifact_index"].read_text(encoding="utf-8")
     assert "outputs/full_run/metrics: passed" in checklist
     assert "`outputs/full_run/metrics/significance_tests.json`" in artifact_index
+    assert "`outputs/full_run/tables/table1_main_results.csv`" in artifact_index
+    assert "`outputs/full_run/tables/table6_robustness.tex`" in artifact_index
+    assert "`outputs/full_run/figures/figure2_quality_token_pareto.pdf`" in artifact_index
+    assert "`outputs/full_run/human_audit/preference_mapping.json`" in artifact_index
+    assert "source `scripts/05_make_tables.py`" in artifact_index
 
 
 def test_default_paper_artifact_paths_require_concrete_tables_figures_and_metrics(tmp_path):

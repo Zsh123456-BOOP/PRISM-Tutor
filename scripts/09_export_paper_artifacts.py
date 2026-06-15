@@ -30,11 +30,11 @@ def _load_shard_plan(path: str | None) -> dict | None:
         return None
     plan_path = Path(path)
     if not plan_path.exists():
-        return None
+        raise SystemExit(f"Missing shard plan: {plan_path}")
     try:
         return json.loads(plan_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
-        return None
+        raise SystemExit(f"Invalid shard plan JSON: {plan_path}")
 
 
 def _load_json(path: Path) -> dict:
