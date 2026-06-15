@@ -111,21 +111,34 @@ def build_commands(args: argparse.Namespace) -> list[dict[str, Any]]:
                     human_audit,
                 ),
             },
-            {
-                "name": "paper_artifacts",
-                "argv": _cmd(
-                    "scripts/09_export_paper_artifacts.py",
-                    "--root",
-                    ".",
-                    "--output_dir",
-                    paper_artifacts,
-                    "--logs",
-                    logs,
-                    "--artifact-prefix",
-                    args.output_dir,
-                ),
-            },
         ]
+    )
+    if args.run_human_agreement:
+        agreement_argv = _cmd(
+            "scripts/08_human_agreement.py",
+            "--input",
+            str(Path(human_audit) / "human_audit_labeled.csv"),
+            "--output",
+            str(Path(human_audit) / "human_agreement_report.json"),
+        )
+        if args.allow_unlabeled_agreement:
+            agreement_argv.append("--allow-unlabeled")
+        commands.append({"name": "human_agreement", "argv": agreement_argv})
+    commands.append(
+        {
+            "name": "paper_artifacts",
+            "argv": _cmd(
+                "scripts/09_export_paper_artifacts.py",
+                "--root",
+                ".",
+                "--output_dir",
+                paper_artifacts,
+                "--logs",
+                logs,
+                "--artifact-prefix",
+                args.output_dir,
+            ),
+        }
     )
     return commands
 
@@ -153,6 +166,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--judge-config", default="configs/judge.yaml")
     parser.add_argument("--audit-n", type=int, default=200)
     parser.add_argument("--run-judge", action="store_true", help="Run the configured judge. This may call an external API.")
+    parser.add_argument("--run-human-agreement", action="store_true", help="Compute agreement after labeled human audit CSV exists.")
+    parser.add_argument("--allow-unlabeled-agreement", action="store_true", help="Allow agreement smoke from blind CSV when labels are not filled.")
     parser.add_argument("--allow-incomplete", action="store_true", help="Allow smoke finalization before all shards complete.")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--manifest", default="outputs/full_run/finalization_manifest.json")
@@ -169,6 +184,8 @@ def main(argv: list[str] | None = None) -> int:
         "status": status,
         "allow_incomplete": args.allow_incomplete,
         "run_judge": args.run_judge,
+        "run_human_agreement": args.run_human_agreement,
+        "allow_unlabeled_agreement": args.allow_unlabeled_agreement,
         "shard_status": summary,
         **completion,
         "steps": steps,
@@ -185,6 +202,8 @@ def main(argv: list[str] | None = None) -> int:
                 **completion,
                 "planned_steps": [step["name"] for step in steps],
                 "run_judge": args.run_judge,
+                "run_human_agreement": args.run_human_agreement,
+                "allow_unlabeled_agreement": args.allow_unlabeled_agreement,
                 "allow_incomplete": args.allow_incomplete,
                 "dry_run": args.dry_run,
             },

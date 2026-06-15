@@ -93,6 +93,8 @@ def test_finalize_only_adds_judge_when_requested(tmp_path: Path) -> None:
         output_dir=str(tmp_path / "out"),
         gold="data/splits",
         run_judge=True,
+        run_human_agreement=False,
+        allow_unlabeled_agreement=False,
         judge_config="configs/judge.yaml",
         audit_n=200,
     )
@@ -107,6 +109,8 @@ def test_finalize_paper_artifacts_uses_full_run_prefix(tmp_path: Path) -> None:
         output_dir=str(tmp_path / "out"),
         gold="data/splits",
         run_judge=False,
+        run_human_agreement=False,
+        allow_unlabeled_agreement=False,
         judge_config="configs/judge.yaml",
         audit_n=200,
     )
@@ -123,6 +127,8 @@ def test_finalize_human_audit_uses_full_run_prerequisite_paths(tmp_path: Path) -
         output_dir=str(tmp_path / "out"),
         gold="data/splits",
         run_judge=True,
+        run_human_agreement=False,
+        allow_unlabeled_agreement=False,
         judge_config="configs/judge.yaml",
         audit_n=200,
     )
@@ -137,3 +143,28 @@ def test_finalize_human_audit_uses_full_run_prerequisite_paths(tmp_path: Path) -
         tmp_path / "out" / "judge_scores" / "judge_scores.jsonl"
     )
     assert audit_command["argv"][audit_command["argv"].index("--tables") + 1] == str(tmp_path / "out" / "tables")
+
+
+def test_finalize_can_insert_human_agreement_before_paper_artifacts(tmp_path: Path) -> None:
+    args = finalize.argparse.Namespace(
+        output_dir=str(tmp_path / "out"),
+        gold="data/splits",
+        run_judge=False,
+        run_human_agreement=True,
+        allow_unlabeled_agreement=True,
+        judge_config="configs/judge.yaml",
+        audit_n=200,
+    )
+
+    commands = finalize.build_commands(args)
+    names = [command["name"] for command in commands]
+    agreement_command = next(command for command in commands if command["name"] == "human_agreement")
+
+    assert names[-2:] == ["human_agreement", "paper_artifacts"]
+    assert agreement_command["argv"][agreement_command["argv"].index("--input") + 1] == str(
+        tmp_path / "out" / "human_audit" / "human_audit_labeled.csv"
+    )
+    assert agreement_command["argv"][agreement_command["argv"].index("--output") + 1] == str(
+        tmp_path / "out" / "human_audit" / "human_agreement_report.json"
+    )
+    assert "--allow-unlabeled" in agreement_command["argv"]
