@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,7 @@ from .schema import first_present, make_record, stable_hash
 
 
 ID_FIELDS = ("id", "record_id", "sample_id", "example_id", "uid", "question_id")
+MATHDIAL_MOVE_RE = re.compile(r"^\((?P<move>[^)]+)\)\s*(?P<text>.*)$", flags=re.DOTALL)
 
 
 def load_mathdial(raw_path: str | Path) -> list[dict[str, Any]]:
@@ -85,7 +87,11 @@ def load_mathdial(raw_path: str | Path) -> list[dict[str, Any]]:
                     ),
                 ),
             }
-            metadata = _metadata(sample, official_split=_official_split(sample))
+            metadata = _metadata(sample, official_split=_official_split(sample) or _split_from_source_file(source_file))
+            for key in ("ground_truth", "student_incorrect_solution", "student_profile", "teacher_described_confusion"):
+                value = first_present(sample, (key,))
+                if value not in (None, ""):
+                    metadata[key] = value
             records.append(
                 make_record(
                     dataset="mathdial",
@@ -198,6 +204,9 @@ def load_misconception(raw_path: str | Path) -> list[dict[str, Any]]:
 
 def _iter_mathdial_samples(record: Mapping[str, Any]) -> Iterator[dict[str, Any]]:
     turns = first_present(record, ("turns", "dialogue", "dialog", "messages", "conversation"))
+    if isinstance(turns, str):
+        yield from _iter_mathdial_string_samples(record, turns)
+        return
     if not isinstance(turns, list):
         yield dict(record)
         return
@@ -229,6 +238,57 @@ def _iter_mathdial_samples(record: Mapping[str, Any]) -> Iterator[dict[str, Any]
         yield sample
 
 
+def _iter_mathdial_string_samples(record: Mapping[str, Any], conversation: str) -> Iterator[dict[str, Any]]:
+    base = {key: value for key, value in record.items() if key != "conversation"}
+    last_student: Any = first_present(base, ("student_utterance", "student_response", "student_answer", "student_incorrect_solution"))
+    emitted = False
+    for turn_index, raw_turn in enumerate(part.strip() for part in conversation.split("|EOM|")):
+        if not raw_turn or ":" not in raw_turn:
+            continue
+        speaker, content = raw_turn.split(":", 1)
+        role = _mathdial_role(speaker)
+        content = content.strip()
+        if role == "student":
+            last_student = content
+            continue
+        if role != "tutor":
+            continue
+        move, text = _split_teacher_move(content)
+        sample = dict(base)
+        sample.update(
+            {
+                "conversation_id": first_present(record, ("qid", "id", "conversation_id")) or _raw_id(record, Path("mathdial"), 0),
+                "student_utterance": last_student,
+                "tutor_response": text,
+                "scaffolding": [move] if move else [],
+                "turn_index": turn_index,
+            }
+        )
+        yield sample
+        emitted = True
+
+    if not emitted:
+        sample = dict(base)
+        sample["dialogue_text"] = conversation
+        yield sample
+
+
+def _mathdial_role(speaker: str) -> str:
+    normalized = speaker.strip().lower()
+    if normalized in {"teacher", "tutor", "assistant"}:
+        return "tutor"
+    if normalized in {"student", "learner", "user"}:
+        return "student"
+    return "student"
+
+
+def _split_teacher_move(text: str) -> tuple[str | None, str]:
+    match = MATHDIAL_MOVE_RE.match(text.strip())
+    if not match:
+        return None, text.strip()
+    return match.group("move").strip(), match.group("text").strip()
+
+
 def _raw_id(record: Mapping[str, Any], source_file: Path, source_index: int, suffix: int | None = None) -> str:
     value = first_present(record, ID_FIELDS)
     if value is None:
@@ -249,6 +309,13 @@ def _official_split(record: Mapping[str, Any]) -> str | None:
     if normalized in {"train", "dev", "test"}:
         return normalized
     return normalized or None
+
+
+def _split_from_source_file(source_file: Path) -> str | None:
+    split = source_file.stem.lower()
+    if split in {"train", "dev", "test"}:
+        return split
+    return None
 
 
 def _metadata(record: Mapping[str, Any], official_split: str | None = None) -> dict[str, Any]:

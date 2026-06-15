@@ -148,3 +148,37 @@ def test_mathdial_conversation_split_keeps_conversations_together(tmp_path):
             previous = conversation_to_split.setdefault(row["conversation_id"], split)
             assert previous == split
     assert len(conversation_to_split) == 12
+
+
+def test_mathdial_official_string_conversation_is_expanded(tmp_path):
+    _write_jsonl(
+        tmp_path / "raw" / "mathdial" / "train.jsonl",
+        [
+            {
+                "qid": 5000012,
+                "question": "How much water is left?",
+                "ground_truth": "54",
+                "student_incorrect_solution": "72",
+                "conversation": (
+                    "Teacher: (probing)What is half of 36?|EOM|"
+                    "Steven: 18.|EOM|"
+                    "Teacher: (generic)Exactly correct!"
+                ),
+            }
+        ],
+    )
+    _write_jsonl(tmp_path / "raw" / "bridge" / "bridge.jsonl", [])
+    _write_jsonl(tmp_path / "raw" / "misconception" / "misconception.jsonl", [])
+
+    report = build_datasets(_config(tmp_path), strict=True)
+    mathdial = read_jsonl(tmp_path / "processed" / "mathdial.jsonl")
+
+    assert len(mathdial) == 2
+    assert mathdial[0]["conversation_id"] == 5000012
+    assert mathdial[0]["student_utterance"] == "72"
+    assert mathdial[0]["tutor_response"] == "What is half of 36?"
+    assert mathdial[0]["scaffolding"] == ["probing"]
+    assert mathdial[1]["student_utterance"] == "18."
+    assert mathdial[0]["metadata"]["official_split"] == "train"
+    assert mathdial[0]["metadata"]["ground_truth"] == "54"
+    assert report["datasets"]["mathdial"]["field_completeness"]["student_utterance"] == 1.0
