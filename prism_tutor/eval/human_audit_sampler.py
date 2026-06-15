@@ -17,6 +17,7 @@ FORBIDDEN_BLIND_FIELDS = {
 
 BLIND_FIELDS = [
     "audit_id",
+    "display_order",
     "sample_id",
     "dataset",
     "problem",
@@ -59,7 +60,9 @@ def sample_human_audit(
         remainder = [row for row in rows if id(row) not in used]
         samples.extend(_mixed_random_and_hard(remainder, target_n - len(samples), rng))
 
-    blind_rows = [_blind_row(row, idx + 1) for idx, row in enumerate(samples[:target_n])]
+    display_samples = samples[:target_n]
+    rng.shuffle(display_samples)
+    blind_rows = [_blind_row(row, idx + 1) for idx, row in enumerate(display_samples)]
     validate_blind_rows(blind_rows)
     return {
         "blind_rows": blind_rows,
@@ -70,6 +73,9 @@ def sample_human_audit(
             "dataset_targets": dataset_targets,
             "shortages": shortages,
             "sampling_policy": "50pct random stratified + 50pct hard where available",
+            "display_order_seed": seed,
+            "display_order_audit_ids": [row["audit_id"] for row in blind_rows],
+            "display_order_sample_ids": [row.get("sample_id") for row in blind_rows],
         },
     }
 
@@ -79,6 +85,8 @@ def validate_blind_rows(rows: list[dict[str, Any]]) -> None:
         leaked = FORBIDDEN_BLIND_FIELDS & set(row)
         if leaked:
             raise ValueError(f"blind row {idx} contains forbidden fields: {sorted(leaked)}")
+        if int(row.get("display_order", idx)) != idx:
+            raise ValueError(f"blind row {idx} has invalid display_order")
 
 
 def _mixed_random_and_hard(pool: list[dict[str, Any]], n: int, rng: random.Random) -> list[dict[str, Any]]:
@@ -123,6 +131,7 @@ def _hard_score(row: dict[str, Any]) -> int:
 def _blind_row(row: dict[str, Any], audit_id: int) -> dict[str, Any]:
     return {
         "audit_id": f"A{audit_id:04d}",
+        "display_order": audit_id,
         "sample_id": row.get("sample_id"),
         "dataset": row.get("dataset"),
         "problem": row.get("problem"),
