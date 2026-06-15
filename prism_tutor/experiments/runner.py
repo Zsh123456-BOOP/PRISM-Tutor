@@ -487,6 +487,8 @@ def _failure_record(
 
 
 def run_generation(options: RunnerOptions) -> dict[str, Any]:
+    run_started_at = datetime.now(timezone.utc)
+    perf_started = time.perf_counter()
     _validate_shard_options(options.num_shards, options.shard_index)
     config, experiment_spec, method_names, datasets, split = _resolve_run_plan(options)
     registry = default_method_registry()
@@ -551,6 +553,10 @@ def run_generation(options: RunnerOptions) -> dict[str, Any]:
         raise
     finally:
         run_manifest = {
+            "started_at_utc": run_started_at.isoformat(),
+            "finished_at_utc": datetime.now(timezone.utc).isoformat(),
+            "duration_seconds": time.perf_counter() - perf_started,
+            "config_path": options.config_path,
             "experiment": experiment_spec.name if experiment_spec else options.experiment,
             "datasets": datasets,
             "split": split,

@@ -6,7 +6,7 @@
 
 ## 已完成的代码路径
 
-- [x] 01 项目初始化与复现规范：`configs/`、`environment.yml`、`requirements.txt`、`pyproject.toml`、复现 metadata、`.gitignore`。
+- [x] 01 项目初始化与复现规范：`configs/`、`environment.yml`、`requirements.txt`、`pyproject.toml`、复现 metadata、`.gitignore`；experiment manifest 带 `schema_version`、audit block、config snapshot、input/output paths、duration 和 CUDA/VLLM env metadata。
 - [x] 02 环境检查：`scripts/00_prepare_env_check.py` 可生成 env check report。
 - [x] 03 Qwen3-8B vLLM 服务配置：`serving/start_vllm_*.sh`、`serving/health_check.py` dry-run 与服务器 live health check 可用。
 - [x] 04 数据 schema 与 split：`scripts/01_build_datasets.py`、`prism_tutor/data/` 支持本地 raw JSON/JSONL/CSV；MathDial、Bridge、MaE Misconception loader 已按真实源格式验证。
@@ -15,7 +15,7 @@
 - [x] 07 Runtime state：`prism_tutor/runtime/` graph state、checkpoint、node interface；`GraphBuilder` 优先使用 LangGraph backend，当前环境缺少 LangGraph 时使用同一 `invoke` 接口的 `simple_fallback`，测试覆盖 checkpoint audit fields、max rounds 与 token budget。
 - [x] 08 Baseline 方法：method registry 覆盖 B0-B5 与实验变体；`prism_tutor/baselines/` 提供 Single Tutor、Fixed 2、Fixed 4、Debate、Generic Sparse、Difficulty Routing 与 Oracle Routing planner；runner live baseline 路径会记录 `baseline_plan`，Generic Sparse 与 Difficulty Routing 有禁止读取教育风险字段的 fairness tests。
 - [x] 09 PRISM 模块：risk estimator、QoS router、budget controller、state commit、M1/M2/M3 graph。
-- [x] 10 Runner 与日志：`scripts/02_run_generation.py` 生成 JSONL raw logs 与 manifest，支持 `--live-llm` 真实 vLLM endpoint 调用和 `--num-shards/--shard-index` 样本级分片。
+- [x] 10 Runner 与日志：`scripts/02_run_generation.py` 生成 JSONL raw logs 与 schema-versioned manifest，支持 `--live-llm` 真实 vLLM endpoint 调用和 `--num-shards/--shard-index` 样本级分片。
 - [x] 11 自动指标：`scripts/04_compute_metrics.py` 生成 record/aggregate metrics 和 coverage report，并已支持 unified schema gold 字段映射。
 - [x] 12 LLM judge：`scripts/03_run_judge.py` 默认 mock；真实 DeepSeek 需显式环境变量，已验证 `thinking_type=disabled` 后可稳定解析。
 - [x] 13 实验矩阵：`configs/experiments.yaml` 与 `scripts/run_exp*.sh`。

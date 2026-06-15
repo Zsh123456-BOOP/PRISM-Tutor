@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.metadata
 import json
+import os
 import platform
 import subprocess
 import sys
@@ -61,6 +62,10 @@ def collect_reproducibility_metadata(config_snapshot_path: str | None = None) ->
         "python": sys.version,
         "python_executable": sys.executable,
         "platform": platform.platform(),
+        "environment": {
+            "CUDA_VISIBLE_DEVICES": os.environ.get("CUDA_VISIBLE_DEVICES"),
+            "VLLM_USE_MODELSCOPE": os.environ.get("VLLM_USE_MODELSCOPE"),
+        },
         "git": git_metadata(),
         "package_versions": package_versions(),
         "config_snapshot_path": config_snapshot_path,

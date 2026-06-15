@@ -108,8 +108,18 @@ def test_runner_writes_smoke_generation_jsonl_and_manifest(tmp_path: Path) -> No
     assert records[0]["method"] == "single_tutor"
     assert records[0]["parse_success"] is True
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["schema_version"] == "0.2.0"
+    assert manifest["manifest_type"] == "experiment_run"
     assert manifest["status"] == "completed"
     assert manifest["run"]["counts"]["succeeded"] == 2
+    assert manifest["audit"]["datasets"] == ["mathdial"]
+    assert manifest["audit"]["methods"] == ["single_tutor"]
+    assert manifest["audit"]["model"] == "Qwen/Qwen3-8B"
+    assert manifest["audit"]["generation_config"]["enable_thinking"] is False
+    assert manifest["audit"]["input_paths"]["data_splits"] == "data/splits"
+    assert manifest["audit"]["output_paths"]["generations"] == str(generation_path)
+    assert manifest["audit"]["duration_seconds"] is not None
+    assert "CUDA_VISIBLE_DEVICES" in manifest["reproducibility"]["environment"]
 
 
 def test_load_samples_shards_are_disjoint_and_cover_fallback_samples() -> None:
