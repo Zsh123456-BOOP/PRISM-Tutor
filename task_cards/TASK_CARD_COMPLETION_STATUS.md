@@ -27,7 +27,7 @@
 
 - [x] 本机 `python -m compileall prism_tutor scripts data serving tests`
 - [x] 本机 `python -m pytest -q`，结果：162 passed。
-- [x] 服务器 `python -m pytest -q`，结果：152 passed。
+- [x] 服务器 `python -m pytest -q`，结果：162 passed。
 - [x] `python scripts/00_prepare_env_check.py --config configs/default.yaml --dry-run`
 - [x] 服务器 env check dry-run：`CUDA_VISIBLE_DEVICES=2,3 python scripts/00_prepare_env_check.py --config configs/default.yaml --output /tmp/prism_env_check_latest.json --dry-run`，结果 `status=ok`，检测到 4 张 GPU，CUDA_VISIBLE_DEVICES 与配置一致。
 - [x] `python scripts/01_build_datasets.py --help`
@@ -66,7 +66,7 @@
 - [x] Table export coverage：`scripts/05_make_tables.py` 可自动生成 `table1_main_results` 至 `table6_robustness` 的 CSV/TeX，并写出 paired significance JSON。
 - [x] Exp5/Exp6 runtime variant coverage：Exp5 ablation 会真实禁用 risk estimator、QoS routing、budget controller、state commit 或对应风险项；Exp6 dry-run smoke 验证 `fixed_4/debate/generic_sparse/ours_full × noise{0.2,0.4} × budget{1000,2000,4000}` 展开为 24 个 method variants。
 - [x] Shard progress report：`python scripts/11_plan_or_run_shards.py progress --plan outputs/full_run/shard_plan.json --supervisor-log outputs/full_run/logs/shards/supervisor_compact.jsonl --rate-window 5` 已在服务器验证，health summary 当前为 `ok`，并记录 `target_running`。
-- [x] 正式 full_run 后台运行：已完成 163 个 shard，18 个 shard 正在 running；最近检查 generation_rows `15528`、error_rows `0`，estimated_records `294053`，completion_fraction `0.05280680693616457`，health summary 为 `ok`。
+- [x] 正式 full_run 后台运行：已完成 174 个 shard，21 个 shard 正在 running；最近检查 generation_rows `16631`、error_rows `0`，estimated_records `294053`，completion_fraction `0.05655783141134421`；health summary 为 `warn`，原因是 running 高于 target 18，当前应等待运行中 job 回落后再 maintain。
 
 ## 仍需服务器真实执行的项目
 
@@ -78,7 +78,7 @@
 - [x] 用 live smoke raw logs 重新生成 smoke 版 tables、figures、paper artifacts。
 - [x] 提供全量正式实验前的分片执行能力与规模估算 gate。
 - [x] 提供全量正式实验的 shard manifest、status、launch 和 maintain 工具：`scripts/11_plan_or_run_shards.py`。
-- [ ] 使用真实 Qwen3-8B endpoint 跑完全量 Exp0-Exp6 generation。目前已完成 Exp0 前 163 个 shard，并由 supervisor 维持约 18 个 shard 并发继续运行；尚未完成全量 1792 个 job。
+- [ ] 使用真实 Qwen3-8B endpoint 跑完全量 Exp0-Exp6 generation。目前已完成 Exp0 前 174 个 shard，并由 supervisor 维持运行；当前 running 高于 target 18，尚未完成全量 1792 个 job。
 - [ ] 全量实验完成后执行正式 200 条 blind human audit，并填入人工标签后计算 agreement。
 - [ ] 用全量真实 raw logs 重新生成正式论文 tables、figures、paper artifacts。
 
