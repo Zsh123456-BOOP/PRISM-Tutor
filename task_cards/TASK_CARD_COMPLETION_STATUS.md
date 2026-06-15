@@ -11,7 +11,7 @@
 - [x] 03 Qwen3-8B vLLM 服务配置：`serving/start_vllm_*.sh`、`serving/health_check.py` dry-run 与服务器 live health check 可用。
 - [x] 04 数据 schema 与 split：`scripts/01_build_datasets.py`、`prism_tutor/data/` 支持本地 raw JSON/JSONL/CSV；MathDial、Bridge、MaE Misconception loader 已按真实源格式验证。
 - [x] 05 Agent schema 与 base client：`prism_tutor/agents/schemas.py`、mock-safe OpenAI-compatible client，支持 endpoint-specific served model name 与 retryable HTTP/timeout request retry。
-- [x] 06 Agent prompt 与 JSON repair：prompt、`<think>` 剥离、retry/repair parser。
+- [x] 06 Agent prompt 与 JSON repair：prompt、`<think>` 剥离、retry/repair parser；测试覆盖 parse failure 后 retry 与 final_tutor `<think>` 不进入 student-visible output。
 - [x] 07 Runtime state：`prism_tutor/runtime/` graph state、checkpoint、node interface；`GraphBuilder` 优先使用 LangGraph backend，当前环境缺少 LangGraph 时使用同一 `invoke` 接口的 `simple_fallback`，测试覆盖 checkpoint audit fields、max rounds 与 token budget。
 - [x] 08 Baseline 方法：method registry 覆盖 B0-B5 与实验变体；`prism_tutor/baselines/` 提供 Single Tutor、Fixed 2、Fixed 4、Debate、Generic Sparse、Difficulty Routing 与 Oracle Routing planner；runner live baseline 路径会记录 `baseline_plan`，Generic Sparse 与 Difficulty Routing 有禁止读取教育风险字段的 fairness tests。
 - [x] 09 PRISM 模块：risk estimator、QoS router、budget controller、state commit、M1/M2/M3 graph。
@@ -26,7 +26,7 @@
 ## 已验证命令
 
 - [x] 本机 `python -m compileall prism_tutor scripts data serving tests`
-- [x] 本机 `python -m pytest -q`，结果：89 passed。
+- [x] 本机 `python -m pytest -q`，结果：91 passed。
 - [x] 服务器 `python -m pytest -q`，结果：89 passed。
 - [x] `python scripts/00_prepare_env_check.py --config configs/default.yaml --dry-run`
 - [x] 服务器 env check dry-run：`CUDA_VISIBLE_DEVICES=2,3 python scripts/00_prepare_env_check.py --config configs/default.yaml --output /tmp/prism_env_check_latest.json --dry-run`，结果 `status=ok`，检测到 4 张 GPU，CUDA_VISIBLE_DEVICES 与配置一致。
