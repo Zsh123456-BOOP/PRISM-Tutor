@@ -294,6 +294,42 @@ def test_checklist_fails_on_failed_artifact_content(tmp_path):
 
 def test_export_paper_artifacts_populates_manifest_from_shard_plan(tmp_path):
     (tmp_path / "configs").mkdir()
+    (tmp_path / "configs" / "default.yaml").write_text(
+        "\n".join(
+            [
+                "model:",
+                "  generator: Qwen/Qwen3-8B",
+                "  dtype: bfloat16",
+                "  quantization: null",
+                "  use_modelscope: true",
+                "  enable_thinking: false",
+                "  endpoints:",
+                "    - base_url: http://localhost:8000/v1",
+                "      model: qwen3-8b-gpu0",
+                "generation:",
+                "  temperature: 0.2",
+                "  top_p: 0.8",
+                "  retries: 1",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "configs" / "judge.yaml").write_text(
+        "\n".join(
+            [
+                "provider: deepseek",
+                "requested_model: deepseek-v4-pro",
+                "temperature: 0.0",
+                "top_p: 1.0",
+                "max_tokens: 768",
+                "retries: 1",
+                "thinking_type: disabled",
+                "response_format_json: false",
+                "dry_run: false",
+            ]
+        ),
+        encoding="utf-8",
+    )
     (tmp_path / "configs" / "experiments.yaml").write_text(
         "\n".join(
             [
@@ -367,3 +403,14 @@ def test_export_paper_artifacts_populates_manifest_from_shard_plan(tmp_path):
     assert exp0["job_count"] == 1
     assert exp0["estimated_records"] == 10
     assert exp0["output_paths"]["generations"] == ["outputs/full_run/generations/exp0.jsonl"]
+    assert manifest["config_snapshot"]["path"] == "configs/default.yaml"
+    assert len(manifest["config_snapshot"]["sha256"]) == 64
+    assert manifest["model"]["generator"] == "Qwen/Qwen3-8B"
+    assert manifest["model"]["enable_thinking"] is False
+    assert manifest["generation_config"]["temperature"] == 0.2
+    assert manifest["judge_config"]["requested_model"] == "deepseek-v4-pro"
+    assert manifest["judge_config"]["dry_run"] is False
+    assert "api_key" not in json.dumps(manifest["judge_config"]).lower()
+    assert exp0["model"] == manifest["model"]
+    assert exp0["generation_config"] == manifest["generation_config"]
+    assert exp0["judge_config"] == manifest["judge_config"]

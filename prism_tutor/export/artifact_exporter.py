@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -89,7 +90,8 @@ def build_experiment_manifest(
     root: Path,
     shard_plan: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    plan_experiments = _experiments_from_shard_plan(root, shard_plan) if shard_plan else {}
+    run_metadata = _manifest_run_metadata(root, shard_plan)
+    plan_experiments = _experiments_from_shard_plan(root, shard_plan, run_metadata) if shard_plan else {}
     by_exp = {}
     for item in manifests:
         if not item:
@@ -106,10 +108,14 @@ def build_experiment_manifest(
         "expected_experiments": expected,
         "missing_experiments": missing,
         "root": str(root),
+        "config_snapshot": run_metadata["config_snapshot"],
+        "model": run_metadata["model"],
+        "generation_config": run_metadata["generation_config"],
+        "judge_config": run_metadata["judge_config"],
     }
 
 
-def _experiments_from_shard_plan(root: Path, shard_plan: dict[str, Any]) -> dict[str, Any]:
+def _experiments_from_shard_plan(root: Path, shard_plan: dict[str, Any], run_metadata: dict[str, Any]) -> dict[str, Any]:
     jobs = [job for job in shard_plan.get("jobs", []) if isinstance(job, dict)]
     config = _load_experiments_config(root, shard_plan.get("experiments_config"))
     output: dict[str, Any] = {}
@@ -127,6 +133,10 @@ def _experiments_from_shard_plan(root: Path, shard_plan: dict[str, Any]) -> dict
                 "output_dir": shard_plan.get("output_dir"),
                 "split_dir": shard_plan.get("split_dir"),
                 "live_llm": shard_plan.get("live_llm"),
+                "config_snapshot": run_metadata["config_snapshot"],
+                "model": run_metadata["model"],
+                "generation_config": run_metadata["generation_config"],
+                "judge_config": run_metadata["judge_config"],
                 "job_count": 0,
                 "estimated_records": 0,
                 "shards": [],
@@ -149,6 +159,60 @@ def _experiments_from_shard_plan(root: Path, shard_plan: dict[str, Any]) -> dict
         if not item.get("split"):
             item["split"] = config.get(item["experiment"], {}).get("split")
     return dict(sorted(output.items()))
+
+
+def _manifest_run_metadata(root: Path, shard_plan: dict[str, Any] | None) -> dict[str, Any]:
+    config_path = str((shard_plan or {}).get("config") or (shard_plan or {}).get("config_path") or "configs/default.yaml")
+    judge_path = str((shard_plan or {}).get("judge_config") or "configs/judge.yaml")
+    config = _load_yaml_file(root, config_path)
+    judge = _load_yaml_file(root, judge_path)
+    model = config.get("model") if isinstance(config.get("model"), dict) else {}
+    generation = config.get("generation") if isinstance(config.get("generation"), dict) else {}
+    return {
+        "config_snapshot": {
+            "path": config_path,
+            "sha256": _file_sha256(root / config_path),
+        },
+        "model": {
+            "generator": model.get("generator"),
+            "dtype": model.get("dtype"),
+            "quantization": model.get("quantization"),
+            "use_modelscope": model.get("use_modelscope"),
+            "enable_thinking": model.get("enable_thinking"),
+            "endpoints": model.get("endpoints", []),
+        },
+        "generation_config": generation,
+        "judge_config": {
+            "path": judge_path,
+            "sha256": _file_sha256(root / judge_path),
+            "provider": judge.get("provider"),
+            "requested_model": judge.get("requested_model"),
+            "temperature": judge.get("temperature"),
+            "top_p": judge.get("top_p"),
+            "max_tokens": judge.get("max_tokens"),
+            "retries": judge.get("retries"),
+            "thinking_type": judge.get("thinking_type"),
+            "response_format_json": judge.get("response_format_json"),
+            "dry_run": judge.get("dry_run"),
+        },
+    }
+
+
+def _load_yaml_file(root: Path, rel_path: str) -> dict[str, Any]:
+    path = root / rel_path
+    if not path.exists():
+        return {}
+    try:
+        raw = load_yaml(path)
+    except Exception:
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _file_sha256(path: Path) -> str | None:
+    if not path.exists() or not path.is_file():
+        return None
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _load_experiments_config(root: Path, config_path: Any) -> dict[str, Any]:
