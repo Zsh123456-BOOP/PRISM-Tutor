@@ -27,7 +27,7 @@
 
 - [x] 本机 `python -m compileall prism_tutor scripts data serving tests`
 - [x] 本机 `python -m pytest -q`，结果：80 passed。
-- [x] 服务器 `python -m pytest -q`，结果：73 passed。
+- [x] 服务器 `python -m pytest -q`，结果：80 passed。
 - [x] `python scripts/00_prepare_env_check.py --config configs/default.yaml --dry-run`
 - [x] `python scripts/01_build_datasets.py --help`
 - [x] `bash serving/start_vllm_gpu0.sh`
@@ -49,10 +49,10 @@
 - [x] live smoke blind audit 文件：`outputs/exp_matrix_live_smoke/human_audit_200`，目标 200，实际 123，shortage 已写入 sampling manifest。
 - [x] Human audit formal gate：`scripts/07_sample_human_audit.py` 正式模式缺少 judge scores 或 tables 时拒绝抽样；`--allow-incomplete` 仅用于 smoke，并会在 sampling manifest 记录 prerequisite 状态。
 - [x] Human agreement finalization gate：`scripts/12_finalize_full_run.py --run-human-agreement` 会在 `paper_artifacts` 前运行 `scripts/08_human_agreement.py`，并使用 full-run 本地 `human_audit_labeled.csv` / `human_agreement_report.json` 路径。
-- [x] 全量规模估算：`outputs/exp_matrix_live_smoke/full_run_estimate.json`，约 204,373 generation records、953,088 agent calls、1.6B tokens。
+- [x] 全量规模估算：初版 `outputs/exp_matrix_live_smoke/full_run_estimate.json` 约 204,373 generation records、953,088 agent calls、1.6B tokens；修正 Exp6 robustness 的 noise × budget 展开后，服务器 `outputs/full_run/shard_plan.json` 当前 estimated_records 为 `294053`。
 - [x] Sharded runner dry-run 验证：`outputs/shard_smoke`，2 个 shard 无 sample overlap。
 - [x] Sharded runner live 验证：`outputs/shard_live_smoke`，Exp0 shard0 limit=1，15/15 success，metrics orphan_generation_count `0`。
-- [x] 全量 shard plan：`outputs/full_run/shard_plan.json`，1792 个 job，estimated_records `204373`，初始状态 pending。
+- [x] 全量 shard plan：`outputs/full_run/shard_plan.json`，1792 个 job，estimated_records `294053`；旧估算已在服务器备份为 `outputs/full_run/shard_plan.pre_exp6_variants_1694d10.json`。
 - [x] Shard plan/status/launch 工具验证：`outputs/shard_tool_smoke`，Exp0 8-shard dry-run plan，`launch --next` 后 1 completed / 7 pending，15 generation rows，0 error rows。
 - [x] Shard concurrency maintainer：`python scripts/11_plan_or_run_shards.py maintain --plan outputs/full_run/shard_plan.json --target-running 2 --max-launches 2`，当前 running 已达目标时不会重复启动 job。
 - [x] Shard supervisor：`python scripts/11_plan_or_run_shards.py supervise --plan outputs/full_run/shard_plan.json --target-running 18 --interval-seconds 120 --log-path outputs/full_run/logs/shards/supervisor_compact.jsonl`，服务器 PID `2472200`。
@@ -64,7 +64,7 @@
 - [x] Table export coverage：`scripts/05_make_tables.py` 可自动生成 `table1_main_results` 至 `table6_robustness` 的 CSV/TeX，并写出 paired significance JSON。
 - [x] Exp5/Exp6 runtime variant coverage：Exp5 ablation 会真实禁用 risk estimator、QoS routing、budget controller、state commit 或对应风险项；Exp6 dry-run smoke 验证 `fixed_4/debate/generic_sparse/ours_full × noise{0.2,0.4} × budget{1000,2000,4000}` 展开为 24 个 method variants。
 - [x] Shard progress report：`python scripts/11_plan_or_run_shards.py progress --plan outputs/full_run/shard_plan.json --supervisor-log outputs/full_run/logs/shards/supervisor_compact.jsonl --rate-window 5` 已在服务器验证，health summary 当前为 `ok`，并记录 `target_running`。
-- [x] 正式 full_run 后台运行：已完成 86 个 shard，18 个 shard 正在 running；最近检查 generation_rows `8695`、error_rows `0`，GPU2/GPU3 均 100% utilization，health summary 为 `ok`。
+- [x] 正式 full_run 后台运行：已完成 100 个 shard，18 个 shard 正在 running；最近检查 generation_rows `9981`、error_rows `0`，health summary 为 `ok`。
 
 ## 仍需服务器真实执行的项目
 
@@ -76,7 +76,7 @@
 - [x] 用 live smoke raw logs 重新生成 smoke 版 tables、figures、paper artifacts。
 - [x] 提供全量正式实验前的分片执行能力与规模估算 gate。
 - [x] 提供全量正式实验的 shard manifest、status、launch 和 maintain 工具：`scripts/11_plan_or_run_shards.py`。
-- [ ] 使用真实 Qwen3-8B endpoint 跑完全量 Exp0-Exp6 generation。目前已完成 Exp0 前 86 个 shard，并由 supervisor 维持约 18 个 shard 并发继续运行；尚未完成全量 1792 个 job。
+- [ ] 使用真实 Qwen3-8B endpoint 跑完全量 Exp0-Exp6 generation。目前已完成 Exp0 前 100 个 shard，并由 supervisor 维持约 18 个 shard 并发继续运行；尚未完成全量 1792 个 job。
 - [ ] 全量实验完成后执行正式 200 条 blind human audit，并填入人工标签后计算 agreement。
 - [ ] 用全量真实 raw logs 重新生成正式论文 tables、figures、paper artifacts。
 
