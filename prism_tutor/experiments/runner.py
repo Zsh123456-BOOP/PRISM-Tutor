@@ -31,6 +31,8 @@ class RunnerOptions:
     output_dir: str = "outputs"
     run_id: str | None = None
     live_llm: bool = False
+    num_shards: int = 1
+    shard_index: int = 0
 
 
 def _slug(values: list[str]) -> str:
@@ -41,7 +43,28 @@ def _timestamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
-def load_samples(dataset: str, split: str, *, limit: int | None = None) -> list[dict[str, Any]]:
+def _validate_shard_options(num_shards: int, shard_index: int) -> None:
+    if num_shards < 1:
+        raise ValueError("num_shards must be >= 1")
+    if shard_index < 0 or shard_index >= num_shards:
+        raise ValueError("shard_index must satisfy 0 <= shard_index < num_shards")
+
+
+def _apply_shard(samples: list[dict[str, Any]], *, num_shards: int, shard_index: int) -> list[dict[str, Any]]:
+    _validate_shard_options(num_shards, shard_index)
+    if num_shards == 1:
+        return samples
+    return [sample for index, sample in enumerate(samples) if index % num_shards == shard_index]
+
+
+def load_samples(
+    dataset: str,
+    split: str,
+    *,
+    limit: int | None = None,
+    num_shards: int = 1,
+    shard_index: int = 0,
+) -> list[dict[str, Any]]:
     candidates = [
         Path("data/splits") / dataset / f"{split}.jsonl",
         Path("data/splits") / f"{dataset}_{split}.jsonl",
@@ -61,12 +84,11 @@ def load_samples(dataset: str, split: str, *, limit: int | None = None) -> list[
                 record.setdefault("dataset", dataset)
                 record.setdefault("split", split)
                 samples.append(record)
-                if limit is not None and len(samples) >= limit:
-                    return samples
-        return samples
+        sharded = _apply_shard(samples, num_shards=num_shards, shard_index=shard_index)
+        return sharded[:limit] if limit is not None else sharded
 
     count = limit if limit is not None else 1
-    return [
+    synthetic = [
         {
             "sample_id": f"{dataset}:{split}:{index:06d}",
             "dataset": dataset,
@@ -76,6 +98,7 @@ def load_samples(dataset: str, split: str, *, limit: int | None = None) -> list[
         }
         for index in range(count)
     ]
+    return _apply_shard(synthetic, num_shards=num_shards, shard_index=shard_index)
 
 
 def _resolve_run_plan(options: RunnerOptions) -> tuple[dict[str, Any], ExperimentSpec | None, list[str], list[str], str]:
@@ -100,6 +123,8 @@ def _resolve_run_plan(options: RunnerOptions) -> tuple[dict[str, Any], Experimen
 def _output_paths(options: RunnerOptions, methods: list[str], datasets: list[str], split: str) -> dict[str, Path]:
     output_dir = Path(options.output_dir)
     run_id = options.run_id or f"{options.experiment or 'generation'}_{_slug(datasets)}_{split}_{_slug(methods)}_{_timestamp()}"
+    if options.num_shards > 1 and options.run_id is None:
+        run_id = f"{run_id}_shard{options.shard_index:03d}-of-{options.num_shards:03d}"
     return {
         "generations": output_dir / "generations" / f"{run_id}.jsonl",
         "errors": output_dir / "logs" / f"generation_errors_{run_id}.jsonl",
@@ -352,6 +377,7 @@ def _failure_record(
 
 
 def run_generation(options: RunnerOptions) -> dict[str, Any]:
+    _validate_shard_options(options.num_shards, options.shard_index)
     config, experiment_spec, method_names, datasets, split = _resolve_run_plan(options)
     registry = default_method_registry()
     methods = registry.resolve(method_names)
@@ -371,7 +397,13 @@ def run_generation(options: RunnerOptions) -> dict[str, Any]:
 
     try:
         for dataset in datasets:
-            samples = load_samples(dataset, split, limit=options.limit)
+            samples = load_samples(
+                dataset,
+                split,
+                limit=options.limit,
+                num_shards=options.num_shards,
+                shard_index=options.shard_index,
+            )
             sample_counts[dataset] = len(samples)
             for sample_index, sample in enumerate(samples):
                 for method in methods:
@@ -415,6 +447,8 @@ def run_generation(options: RunnerOptions) -> dict[str, Any]:
             "limit": options.limit,
             "resume": options.resume,
             "live_llm": options.live_llm,
+            "num_shards": options.num_shards,
+            "shard_index": options.shard_index,
             "sample_counts": sample_counts,
             "paths": {key: str(value) for key, value in paths.items()},
             "counts": {

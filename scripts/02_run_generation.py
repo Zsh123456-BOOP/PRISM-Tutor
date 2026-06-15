@@ -33,6 +33,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output_dir", default="outputs")
     parser.add_argument("--run-id")
     parser.add_argument("--live-llm", action="store_true", help="Call configured vLLM endpoints instead of dry-run methods.")
+    parser.add_argument("--num-shards", type=int, default=1, help="Split samples into this many deterministic shards.")
+    parser.add_argument("--shard-index", type=int, default=0, help="Run only this zero-based sample shard.")
     args = parser.parse_args(argv)
 
     result = run_generation(
@@ -48,6 +50,8 @@ def main(argv: list[str] | None = None) -> int:
             output_dir=args.output_dir,
             run_id=args.run_id,
             live_llm=args.live_llm,
+            num_shards=args.num_shards,
+            shard_index=args.shard_index,
         )
     )
     print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))

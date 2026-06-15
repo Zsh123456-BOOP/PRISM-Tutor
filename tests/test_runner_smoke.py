@@ -5,7 +5,9 @@ from pathlib import Path
 
 from prism_tutor.experiments.experiment_matrix import load_experiment_matrix
 from prism_tutor.experiments.method_registry import default_method_registry
-from prism_tutor.experiments.runner import RunnerOptions, run_generation
+import pytest
+
+from prism_tutor.experiments.runner import RunnerOptions, load_samples, run_generation
 
 
 REQUIRED_FIELDS = {
@@ -73,3 +75,42 @@ def test_runner_writes_smoke_generation_jsonl_and_manifest(tmp_path: Path) -> No
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert manifest["status"] == "completed"
     assert manifest["run"]["counts"]["succeeded"] == 2
+
+
+def test_load_samples_shards_are_disjoint_and_cover_fallback_samples() -> None:
+    shard0 = load_samples("missing_dataset", "test", limit=6, num_shards=2, shard_index=0)
+    shard1 = load_samples("missing_dataset", "test", limit=6, num_shards=2, shard_index=1)
+    ids0 = {row["sample_id"] for row in shard0}
+    ids1 = {row["sample_id"] for row in shard1}
+
+    assert ids0.isdisjoint(ids1)
+    assert ids0 | ids1 == {f"missing_dataset:test:{index:06d}" for index in range(6)}
+
+
+def test_runner_manifest_records_shard_options(tmp_path: Path) -> None:
+    result = run_generation(
+        RunnerOptions(
+            methods=["single_tutor"],
+            datasets=["mathdial"],
+            split="test",
+            limit=4,
+            output_dir=str(tmp_path),
+            run_id="shard",
+            num_shards=2,
+            shard_index=1,
+        )
+    )
+    manifest = json.loads(Path(result["paths"]["manifest"]).read_text(encoding="utf-8"))
+    assert manifest["run"]["num_shards"] == 2
+    assert manifest["run"]["shard_index"] == 1
+
+
+def test_runner_rejects_invalid_shard_options(tmp_path: Path) -> None:
+    with pytest.raises(ValueError):
+        run_generation(
+            RunnerOptions(
+                output_dir=str(tmp_path),
+                num_shards=2,
+                shard_index=2,
+            )
+        )
