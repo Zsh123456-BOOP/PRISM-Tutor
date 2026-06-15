@@ -64,6 +64,21 @@ def _completion_summary(summary: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _require_formal_flag_consistency(args: argparse.Namespace) -> None:
+    if args.allow_incomplete:
+        return
+    smoke_flags = []
+    if args.allow_mock_judge:
+        smoke_flags.append("--allow-mock-judge")
+    if args.allow_unlabeled_agreement:
+        smoke_flags.append("--allow-unlabeled-agreement")
+    if smoke_flags:
+        raise SystemExit(
+            "Smoke-only finalization flags require --allow-incomplete: "
+            + ", ".join(smoke_flags)
+        )
+
+
 def _cmd(*parts: str) -> list[str]:
     return [sys.executable, *parts]
 
@@ -258,6 +273,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--step-log-dir", help="Directory for per-step stdout/stderr logs. Defaults to <output-dir>/logs/finalization.")
     args = parser.parse_args(argv)
 
+    _require_formal_flag_consistency(args)
     summary = _status_summary(args.plan)
     _require_complete(summary, args.allow_incomplete)
     completion = _completion_summary(summary)

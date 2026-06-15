@@ -69,6 +69,18 @@ def test_finalize_refuses_error_rows_without_override(tmp_path: Path) -> None:
         raise AssertionError("Expected full run with error rows to fail")
 
 
+def test_finalize_refuses_smoke_only_flags_without_incomplete_override(tmp_path: Path) -> None:
+    plan = _write_plan(tmp_path, ["completed"])
+
+    for flag in ["--allow-mock-judge", "--allow-unlabeled-agreement"]:
+        try:
+            finalize.main(["--plan", str(plan), "--manifest", str(tmp_path / f"{flag}.json"), flag, "--dry-run"])
+        except SystemExit as exc:
+            assert "Smoke-only finalization flags require --allow-incomplete" in str(exc)
+        else:
+            raise AssertionError(f"Expected {flag} without --allow-incomplete to fail")
+
+
 def test_finalize_dry_run_writes_planned_manifest(tmp_path: Path) -> None:
     plan = _write_plan(tmp_path, ["completed", "pending"])
     manifest = tmp_path / "manifest.json"
