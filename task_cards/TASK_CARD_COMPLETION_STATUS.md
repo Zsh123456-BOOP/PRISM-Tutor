@@ -53,8 +53,8 @@
 - [x] 全量 shard plan：`outputs/full_run/shard_plan.json`，1792 个 job，estimated_records `204373`，初始状态 pending。
 - [x] Shard plan/status/launch 工具验证：`outputs/shard_tool_smoke`，Exp0 8-shard dry-run plan，`launch --next` 后 1 completed / 7 pending，15 generation rows，0 error rows。
 - [x] Shard concurrency maintainer：`python scripts/11_plan_or_run_shards.py maintain --plan outputs/full_run/shard_plan.json --target-running 2 --max-launches 2`，当前 running 已达目标时不会重复启动 job。
-- [x] Shard supervisor：`python scripts/11_plan_or_run_shards.py supervise --plan outputs/full_run/shard_plan.json --target-running 2 --interval-seconds 120 --log-path outputs/full_run/logs/shards/supervisor_compact.jsonl`，服务器 PID `2448564`。
-- [x] 正式 full_run 后台运行：`exp0_problem_diagnosis_shard000-of-256` 与 `shard001-of-256` 已完成；`shard002-of-256` PID `2448425`、`shard003-of-256` PID `2448426` 正在 running；最近检查 generation_rows `196`、error_rows `0`。
+- [x] Shard supervisor：`python scripts/11_plan_or_run_shards.py supervise --plan outputs/full_run/shard_plan.json --target-running 4 --interval-seconds 120 --log-path outputs/full_run/logs/shards/supervisor_compact.jsonl`，服务器 PID `2450025`。
+- [x] 正式 full_run 后台运行：`exp0_problem_diagnosis_shard000-of-256` 与 `shard001-of-256` 已完成；`shard002-of-256` PID `2448425`、`shard003-of-256` PID `2448426`、`shard004-of-256` PID `2450042`、`shard005-of-256` PID `2450043` 正在 running；最近检查 generation_rows `268`、error_rows `0`，GPU2/GPU3 均 100% utilization。
 
 ## 仍需服务器真实执行的项目
 
@@ -66,7 +66,7 @@
 - [x] 用 live smoke raw logs 重新生成 smoke 版 tables、figures、paper artifacts。
 - [x] 提供全量正式实验前的分片执行能力与规模估算 gate。
 - [x] 提供全量正式实验的 shard manifest、status、launch 和 maintain 工具：`scripts/11_plan_or_run_shards.py`。
-- [ ] 使用真实 Qwen3-8B endpoint 跑完全量 Exp0-Exp6 generation。目前已完成 Exp0 前 2 个 shard，并由 supervisor 维持 2 个 shard 并发继续运行；尚未完成全量 1792 个 job。
+- [ ] 使用真实 Qwen3-8B endpoint 跑完全量 Exp0-Exp6 generation。目前已完成 Exp0 前 2 个 shard，并由 supervisor 维持 4 个 shard 并发继续运行；尚未完成全量 1792 个 job。
 - [ ] 全量实验完成后执行正式 200 条 blind human audit，并填入人工标签后计算 agreement。
 - [ ] 用全量真实 raw logs 重新生成正式论文 tables、figures、paper artifacts。
 
