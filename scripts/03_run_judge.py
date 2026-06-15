@@ -91,6 +91,34 @@ def _candidate_rows(row: dict, *, seed: int) -> list[dict]:
     return rows
 
 
+def _run_metadata(judged: list[dict], *, dry_run: bool, requested_model: str | None) -> dict:
+    if not judged:
+        return {
+            "dry_run": dry_run,
+            "requested_model": requested_model,
+            "actual_model": None,
+            "actual_models": [],
+            "input_rows": 0,
+            "output_rows": 0,
+            "parsed_count": 0,
+            "error_count": 0,
+        }
+    metadata_rows = [row.get("metadata") for row in judged if isinstance(row.get("metadata"), dict)]
+    base = dict(metadata_rows[0]) if metadata_rows else {"dry_run": dry_run, "requested_model": requested_model}
+    actual_models = sorted({str(meta.get("actual_model")) for meta in metadata_rows if meta.get("actual_model")})
+    base.update(
+        {
+            "actual_model": actual_models[0] if len(actual_models) == 1 else ",".join(actual_models),
+            "actual_models": actual_models,
+            "output_rows": len(judged),
+            "parsed_count": sum(isinstance(row.get("parsed_score"), dict) for row in judged),
+            "error_count": sum(bool(row.get("error")) for row in judged),
+            "raw_response_count": sum(bool(row.get("raw_response")) for row in judged),
+        }
+    )
+    return base
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run mock-safe LLM judge over generation logs.")
     parser.add_argument("--input", default="outputs/generations")
@@ -148,7 +176,8 @@ def main(argv: list[str] | None = None) -> int:
     raw_output = out_dir / "raw" / "judge_raw.jsonl"
     write_jsonl(output, judged)
     write_jsonl(raw_output, judged)
-    metadata = judged[0]["metadata"] if judged else {"dry_run": dry_run, "requested_model": cfg.get("requested_model")}
+    metadata = _run_metadata(judged, dry_run=dry_run, requested_model=cfg.get("requested_model"))
+    metadata["input_rows"] = len(rows)
     write_json(out_dir / "judge_metadata.json", metadata)
 
     print(json.dumps({"input_rows": len(rows), "output": str(output), "raw_output": str(raw_output)}, indent=2))

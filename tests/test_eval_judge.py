@@ -238,9 +238,42 @@ def test_run_judge_writes_display_order_fields(tmp_path):
     rc = run_judge.main(["--input", str(input_path), "--output_dir", str(output_dir), "--seed", "7"])
 
     rows = [json.loads(line) for line in (output_dir / "judge_scores.jsonl").read_text(encoding="utf-8").splitlines()]
+    metadata = json.loads((output_dir / "judge_metadata.json").read_text(encoding="utf-8"))
     assert rc == 0
     assert len(rows) == 2
     assert rows[0]["display_order"] == rows[1]["display_order"]
     assert rows[0]["display_order_seed"] == rows[1]["display_order_seed"]
     assert {row["candidate_label"] for row in rows} == {"a", "b"}
     assert all(row["raw_response"] for row in rows)
+    assert metadata["input_rows"] == 1
+    assert metadata["output_rows"] == 2
+    assert metadata["parsed_count"] == 2
+    assert metadata["error_count"] == 0
+    assert metadata["raw_response_count"] == 2
+    assert metadata["actual_models"] == ["mock-judge"]
+
+
+def test_run_judge_metadata_summarizes_multiple_actual_models():
+    judged = [
+        {
+            "metadata": {"actual_model": "judge-a", "requested_model": "deepseek-v4-pro"},
+            "parsed_score": {"overall": 4},
+            "raw_response": "{}",
+            "error": None,
+        },
+        {
+            "metadata": {"actual_model": "judge-b", "requested_model": "deepseek-v4-pro"},
+            "parsed_score": None,
+            "raw_response": "",
+            "error": "timeout",
+        },
+    ]
+
+    metadata = run_judge._run_metadata(judged, dry_run=False, requested_model="deepseek-v4-pro")
+
+    assert metadata["actual_model"] == "judge-a,judge-b"
+    assert metadata["actual_models"] == ["judge-a", "judge-b"]
+    assert metadata["output_rows"] == 2
+    assert metadata["parsed_count"] == 1
+    assert metadata["error_count"] == 1
+    assert metadata["raw_response_count"] == 1
