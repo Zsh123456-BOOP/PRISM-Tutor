@@ -12,7 +12,7 @@
 - [x] 04 数据 schema 与 split：`scripts/01_build_datasets.py`、`prism_tutor/data/` 支持本地 raw JSON/JSONL/CSV；MathDial、Bridge、MaE Misconception loader 已按真实源格式验证。
 - [x] 05 Agent schema 与 base client：`prism_tutor/agents/schemas.py`、mock-safe OpenAI-compatible client，支持 endpoint-specific served model name。
 - [x] 06 Agent prompt 与 JSON repair：prompt、`<think>` 剥离、retry/repair parser。
-- [x] 07 Runtime state：`prism_tutor/runtime/` graph state、checkpoint、node interface。
+- [x] 07 Runtime state：`prism_tutor/runtime/` graph state、checkpoint、node interface；`GraphBuilder` 优先使用 LangGraph backend，当前环境缺少 LangGraph 时使用同一 `invoke` 接口的 `simple_fallback`，测试覆盖 checkpoint audit fields、max rounds 与 token budget。
 - [x] 08 Baseline 方法：method registry 覆盖 B0-B5 与实验变体；`prism_tutor/baselines/` 提供 Single Tutor、Fixed 2、Fixed 4、Debate、Generic Sparse、Difficulty Routing 与 Oracle Routing planner；runner live baseline 路径会记录 `baseline_plan`，Generic Sparse 与 Difficulty Routing 有禁止读取教育风险字段的 fairness tests。
 - [x] 09 PRISM 模块：risk estimator、QoS router、budget controller、state commit、M1/M2/M3 graph。
 - [x] 10 Runner 与日志：`scripts/02_run_generation.py` 生成 JSONL raw logs 与 manifest，支持 `--live-llm` 真实 vLLM endpoint 调用和 `--num-shards/--shard-index` 样本级分片。
@@ -26,8 +26,8 @@
 ## 已验证命令
 
 - [x] 本机 `python -m compileall prism_tutor scripts data serving tests`
-- [x] 本机 `python -m pytest -q`，结果：84 passed。
-- [x] 服务器 `python -m pytest -q`，结果：80 passed。
+- [x] 本机 `python -m pytest -q`，结果：87 passed。
+- [x] 服务器 `python -m pytest -q`，结果：84 passed。
 - [x] `python scripts/00_prepare_env_check.py --config configs/default.yaml --dry-run`
 - [x] `python scripts/01_build_datasets.py --help`
 - [x] `bash serving/start_vllm_gpu0.sh`
@@ -64,7 +64,7 @@
 - [x] Table export coverage：`scripts/05_make_tables.py` 可自动生成 `table1_main_results` 至 `table6_robustness` 的 CSV/TeX，并写出 paired significance JSON。
 - [x] Exp5/Exp6 runtime variant coverage：Exp5 ablation 会真实禁用 risk estimator、QoS routing、budget controller、state commit 或对应风险项；Exp6 dry-run smoke 验证 `fixed_4/debate/generic_sparse/ours_full × noise{0.2,0.4} × budget{1000,2000,4000}` 展开为 24 个 method variants。
 - [x] Shard progress report：`python scripts/11_plan_or_run_shards.py progress --plan outputs/full_run/shard_plan.json --supervisor-log outputs/full_run/logs/shards/supervisor_compact.jsonl --rate-window 5` 已在服务器验证，health summary 当前为 `ok`，并记录 `target_running`。
-- [x] 正式 full_run 后台运行：已完成 100 个 shard，18 个 shard 正在 running；最近检查 generation_rows `9981`、error_rows `0`，health summary 为 `ok`。
+- [x] 正式 full_run 后台运行：已完成 103 个 shard，18 个 shard 正在 running；最近检查 generation_rows `10329`、error_rows `0`，health summary 为 `ok`。
 
 ## 仍需服务器真实执行的项目
 
@@ -76,7 +76,7 @@
 - [x] 用 live smoke raw logs 重新生成 smoke 版 tables、figures、paper artifacts。
 - [x] 提供全量正式实验前的分片执行能力与规模估算 gate。
 - [x] 提供全量正式实验的 shard manifest、status、launch 和 maintain 工具：`scripts/11_plan_or_run_shards.py`。
-- [ ] 使用真实 Qwen3-8B endpoint 跑完全量 Exp0-Exp6 generation。目前已完成 Exp0 前 100 个 shard，并由 supervisor 维持约 18 个 shard 并发继续运行；尚未完成全量 1792 个 job。
+- [ ] 使用真实 Qwen3-8B endpoint 跑完全量 Exp0-Exp6 generation。目前已完成 Exp0 前 103 个 shard，并由 supervisor 维持约 18 个 shard 并发继续运行；尚未完成全量 1792 个 job。
 - [ ] 全量实验完成后执行正式 200 条 blind human audit，并填入人工标签后计算 agreement。
 - [ ] 用全量真实 raw logs 重新生成正式论文 tables、figures、paper artifacts。
 
