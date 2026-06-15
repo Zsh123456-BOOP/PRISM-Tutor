@@ -27,7 +27,7 @@
 
 - [x] 本机 `python -m compileall prism_tutor scripts data serving tests`
 - [x] 本机 `python -m pytest -q`，结果：68 passed。
-- [x] 服务器 `python -m pytest -q`，结果：65 passed。
+- [x] 服务器 `python -m pytest -q`，结果：68 passed。
 - [x] `python scripts/00_prepare_env_check.py --config configs/default.yaml --dry-run`
 - [x] `python scripts/01_build_datasets.py --help`
 - [x] `bash serving/start_vllm_gpu0.sh`
@@ -58,7 +58,7 @@
 - [x] Full-run finalization gate：`scripts/12_finalize_full_run.py --allow-incomplete --dry-run` 已在服务器真实 shard plan 上验证，默认不调用 judge，计划步骤为 auto metrics、tables、figures、human audit sample、paper artifacts；manifest/stdout 会输出 `completed_jobs`、`total_jobs`、`can_finalize`、`planned_steps`。
 - [x] Paper artifact run-local path gate：`scripts/09_export_paper_artifacts.py --artifact-prefix outputs/full_run` 可让 reproducibility checklist 和 artifact index 检查 full-run 目录，而不是误查全局 `outputs/*`。
 - [x] Shard progress report：`python scripts/11_plan_or_run_shards.py progress --plan outputs/full_run/shard_plan.json --supervisor-log outputs/full_run/logs/shards/supervisor_compact.jsonl --rate-window 5` 已在服务器验证，health summary 当前为 `ok`，并记录 `target_running`。
-- [x] 正式 full_run 后台运行：已完成 46 个 shard，18 个 shard 正在 running；最近检查 generation_rows `5243`、error_rows `0`，近期吞吐约 `87.83` rows/min，粗略 ETA 约 `37.79` hours，GPU2/GPU3 均 100% utilization，health summary 为 `ok`。
+- [x] 正式 full_run 后台运行：已完成 53 个 shard，18 个 shard 正在 running；最近检查 generation_rows `5882`、error_rows `0`，近期吞吐约 `87.18` rows/min，粗略 ETA 约 `37.95` hours，GPU2/GPU3 均 100% utilization，health summary 为 `ok`。
 
 ## 仍需服务器真实执行的项目
 
@@ -70,7 +70,7 @@
 - [x] 用 live smoke raw logs 重新生成 smoke 版 tables、figures、paper artifacts。
 - [x] 提供全量正式实验前的分片执行能力与规模估算 gate。
 - [x] 提供全量正式实验的 shard manifest、status、launch 和 maintain 工具：`scripts/11_plan_or_run_shards.py`。
-- [ ] 使用真实 Qwen3-8B endpoint 跑完全量 Exp0-Exp6 generation。目前已完成 Exp0 前 46 个 shard，并由 supervisor 维持 18 个 shard 并发继续运行；尚未完成全量 1792 个 job。
+- [ ] 使用真实 Qwen3-8B endpoint 跑完全量 Exp0-Exp6 generation。目前已完成 Exp0 前 53 个 shard，并由 supervisor 维持 18 个 shard 并发继续运行；尚未完成全量 1792 个 job。
 - [ ] 全量实验完成后执行正式 200 条 blind human audit，并填入人工标签后计算 agreement。
 - [ ] 用全量真实 raw logs 重新生成正式论文 tables、figures、paper artifacts。
 
