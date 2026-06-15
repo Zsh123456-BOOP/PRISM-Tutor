@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-本仓库已经具备 Task Card 01-16 的可运行代码骨架、mock/dry-run 端到端链路，以及服务器上的 Qwen3-8B vLLM live smoke 链路。MathDial、Bridge 与 MaE Math Misconceptions 三个真实数据集均已下载、传输到服务器并完成 schema build。Exp0-Exp6 已完成真实 Qwen live smoke（limit=1）与 downstream metrics/tables/figures/artifact smoke；真实 DeepSeek judge 已对 live smoke 123 条 generation 完成评分。runner 已支持 sample-level sharding，用于拆分全量正式实验，并已支持 `maintain --target-running N` 可恢复补齐后台并发。当前全量 Exp0-Exp6 正式实验已经开始运行，但尚未完成；也尚未执行正式人工标注版 200 条 blind human audit。
+本仓库已经具备 Task Card 01-16 的可运行代码骨架、mock/dry-run 端到端链路，以及服务器上的 Qwen3-8B vLLM live smoke 链路。MathDial、Bridge 与 MaE Math Misconceptions 三个真实数据集均已下载、传输到服务器并完成 schema build。Exp0-Exp6 已完成真实 Qwen live smoke（limit=1）与 downstream metrics/tables/figures/artifact smoke；真实 DeepSeek judge 已对 live smoke 123 条 generation 完成评分。runner 已支持 sample-level sharding，用于拆分全量正式实验，并已支持 `maintain --target-running N` 与 `supervise` 可恢复补齐后台并发。当前全量 Exp0-Exp6 正式实验已经开始运行并由服务器 supervisor 接管，但尚未完成；也尚未执行正式人工标注版 200 条 blind human audit。
 
 ## 已完成的代码路径
 
@@ -53,7 +53,8 @@
 - [x] 全量 shard plan：`outputs/full_run/shard_plan.json`，1792 个 job，estimated_records `204373`，初始状态 pending。
 - [x] Shard plan/status/launch 工具验证：`outputs/shard_tool_smoke`，Exp0 8-shard dry-run plan，`launch --next` 后 1 completed / 7 pending，15 generation rows，0 error rows。
 - [x] Shard concurrency maintainer：`python scripts/11_plan_or_run_shards.py maintain --plan outputs/full_run/shard_plan.json --target-running 2 --max-launches 2`，当前 running 已达目标时不会重复启动 job。
-- [x] 正式 full_run 后台启动：`exp0_problem_diagnosis_shard000-of-256` PID `2441201`、`exp0_problem_diagnosis_shard001-of-256` PID `2441202`，当前状态 running；最近检查 generation_rows `113`、error_rows `0`。
+- [x] Shard supervisor：`python scripts/11_plan_or_run_shards.py supervise --plan outputs/full_run/shard_plan.json --target-running 2 --interval-seconds 120 --log-path outputs/full_run/logs/shards/supervisor_compact.jsonl`，服务器 PID `2448564`。
+- [x] 正式 full_run 后台运行：`exp0_problem_diagnosis_shard000-of-256` 与 `shard001-of-256` 已完成；`shard002-of-256` PID `2448425`、`shard003-of-256` PID `2448426` 正在 running；最近检查 generation_rows `196`、error_rows `0`。
 
 ## 仍需服务器真实执行的项目
 
@@ -65,7 +66,7 @@
 - [x] 用 live smoke raw logs 重新生成 smoke 版 tables、figures、paper artifacts。
 - [x] 提供全量正式实验前的分片执行能力与规模估算 gate。
 - [x] 提供全量正式实验的 shard manifest、status、launch 和 maintain 工具：`scripts/11_plan_or_run_shards.py`。
-- [ ] 使用真实 Qwen3-8B endpoint 跑完全量 Exp0-Exp6 generation。目前已启动 Exp0 前 2 个 shard，尚未完成全量 1792 个 job。
+- [ ] 使用真实 Qwen3-8B endpoint 跑完全量 Exp0-Exp6 generation。目前已完成 Exp0 前 2 个 shard，并由 supervisor 维持 2 个 shard 并发继续运行；尚未完成全量 1792 个 job。
 - [ ] 全量实验完成后执行正式 200 条 blind human audit，并填入人工标签后计算 agreement。
 - [ ] 用全量真实 raw logs 重新生成正式论文 tables、figures、paper artifacts。
 
