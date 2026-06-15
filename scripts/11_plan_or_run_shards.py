@@ -9,6 +9,7 @@ import os
 import shlex
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -313,6 +314,55 @@ def maintain_jobs(plan: dict[str, Any], *, target_running: int, max_launches: in
     }
 
 
+def _append_jsonl(path: str | Path, record: dict[str, Any]) -> None:
+    output = Path(path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with output.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
+
+
+def _all_terminal(report: dict[str, Any]) -> bool:
+    return set(report["by_status"]) <= {"completed"}
+
+
+def supervise_jobs(
+    plan_path: str | Path,
+    *,
+    target_running: int,
+    interval_seconds: float,
+    max_cycles: int | None = None,
+    log_path: str | Path | None = None,
+) -> dict[str, Any]:
+    if interval_seconds < 1:
+        raise ValueError("interval_seconds must be >= 1")
+    if max_cycles is not None and max_cycles < 1:
+        raise ValueError("max_cycles must be >= 1")
+    plan = load_plan(plan_path)
+    log_path = log_path or Path(plan["output_dir"]) / "logs" / "shards" / "supervisor.jsonl"
+    cycles = 0
+    last_event: dict[str, Any] | None = None
+    while True:
+        cycles += 1
+        event = {
+            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+            "cycle": cycles,
+            "maintain": maintain_jobs(plan, target_running=target_running),
+            "status": status_report(plan),
+        }
+        _append_jsonl(log_path, event)
+        last_event = event
+        if _all_terminal(event["status"]):
+            break
+        if max_cycles is not None and cycles >= max_cycles:
+            break
+        time.sleep(interval_seconds)
+    return {
+        "cycles": cycles,
+        "log_path": str(log_path),
+        "last_status": last_event["status"] if last_event else None,
+    }
+
+
 def _split_csv(value: str | None) -> list[str] | None:
     if value is None:
         return None
@@ -350,6 +400,13 @@ def main(argv: list[str] | None = None) -> int:
     maintain_parser.add_argument("--target-running", type=int, default=2)
     maintain_parser.add_argument("--max-launches", type=int)
 
+    supervise_parser = sub.add_parser("supervise")
+    supervise_parser.add_argument("--plan", default="outputs/full_run/shard_plan.json")
+    supervise_parser.add_argument("--target-running", type=int, default=2)
+    supervise_parser.add_argument("--interval-seconds", type=float, default=300)
+    supervise_parser.add_argument("--max-cycles", type=int)
+    supervise_parser.add_argument("--log-path")
+
     args = parser.parse_args(argv)
     if args.command == "plan":
         plan = build_plan(
@@ -384,6 +441,16 @@ def main(argv: list[str] | None = None) -> int:
             load_plan(args.plan),
             target_running=args.target_running,
             max_launches=args.max_launches,
+        )
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
+    if args.command == "supervise":
+        result = supervise_jobs(
+            args.plan,
+            target_running=args.target_running,
+            interval_seconds=args.interval_seconds,
+            max_cycles=args.max_cycles,
+            log_path=args.log_path,
         )
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0

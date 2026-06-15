@@ -178,3 +178,53 @@ def test_maintain_jobs_launches_missing_background_jobs(monkeypatch) -> None:
     assert result["requested_launches"] == 1
     assert result["launched"] == [{"job_id": "a", "pid": 123, "background": True}]
     assert launched_args == [(None, True, True, 1)]
+
+
+def test_supervise_jobs_writes_cycle_log_and_stops_at_max_cycles(tmp_path: Path, monkeypatch) -> None:
+    plan_path = tmp_path / "plan.json"
+    log_path = tmp_path / "supervisor.jsonl"
+    plan_path.write_text(json.dumps({"output_dir": str(tmp_path / "out"), "jobs": []}), encoding="utf-8")
+    monkeypatch.setattr(
+        shard_planner,
+        "maintain_jobs",
+        lambda plan, *, target_running: {
+            "target_running": target_running,
+            "requested_launches": 0,
+            "launched": [],
+        },
+    )
+    monkeypatch.setattr(
+        shard_planner,
+        "status_report",
+        lambda plan: {"by_status": {"running": 1}, "generation_rows": 2, "error_rows": 0},
+    )
+
+    result = shard_planner.supervise_jobs(
+        plan_path,
+        target_running=2,
+        interval_seconds=1,
+        max_cycles=1,
+        log_path=log_path,
+    )
+
+    rows = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+    assert result["cycles"] == 1
+    assert result["last_status"]["by_status"] == {"running": 1}
+    assert rows[0]["maintain"]["target_running"] == 2
+    assert rows[0]["cycle"] == 1
+
+
+def test_supervise_jobs_stops_when_all_jobs_completed(tmp_path: Path, monkeypatch) -> None:
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(json.dumps({"output_dir": str(tmp_path / "out"), "jobs": []}), encoding="utf-8")
+    monkeypatch.setattr(shard_planner, "maintain_jobs", lambda plan, *, target_running: {"launched": []})
+    monkeypatch.setattr(
+        shard_planner,
+        "status_report",
+        lambda plan: {"by_status": {"completed": 2}, "generation_rows": 4, "error_rows": 0},
+    )
+
+    result = shard_planner.supervise_jobs(plan_path, target_running=2, interval_seconds=1)
+
+    assert result["cycles"] == 1
+    assert result["last_status"]["by_status"] == {"completed": 2}
