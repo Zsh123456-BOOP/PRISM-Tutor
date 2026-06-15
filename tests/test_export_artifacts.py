@@ -292,6 +292,77 @@ def test_checklist_fails_on_failed_artifact_content(tmp_path):
     assert checks["outputs/full_run/human_audit/human_agreement_report.json:content"]["actual_status"] == "failed"
 
 
+def test_reproducibility_checklist_validates_preference_mapping_content(tmp_path):
+    mapping = tmp_path / "outputs" / "full_run" / "human_audit" / "preference_mapping.json"
+    mapping.parent.mkdir(parents=True)
+    mapping.write_text(
+        json.dumps(
+            [
+                {
+                    "audit_id": "A0001",
+                    "sample_id": "s1",
+                    "dataset": "mathdial",
+                    "candidate_a_method": "ours_full",
+                    "candidate_b_method": "fixed_4",
+                    "candidate_a_is_ours": True,
+                    "candidate_b_is_ours": False,
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    checklist = build_reproducibility_checklist(
+        tmp_path,
+        ["outputs/full_run/human_audit/preference_mapping.json"],
+    )
+    check = next(check for check in checklist["checks"] if check["name"].endswith("preference_mapping.json:content"))
+
+    assert check["status"] == "passed"
+    assert check["issues"] == []
+
+
+def test_reproducibility_checklist_rejects_unusable_preference_mapping(tmp_path):
+    mapping = tmp_path / "outputs" / "full_run" / "human_audit" / "preference_mapping.json"
+    mapping.parent.mkdir(parents=True)
+    mapping.write_text(
+        json.dumps(
+            [
+                {
+                    "audit_id": "A0001",
+                    "sample_id": "s1",
+                    "dataset": "mathdial",
+                    "candidate_a_method": "fixed_2",
+                    "candidate_b_method": "fixed_4",
+                    "candidate_a_is_ours": False,
+                    "candidate_b_is_ours": False,
+                },
+                {
+                    "audit_id": "A0002",
+                    "sample_id": "s2",
+                    "dataset": "bridge",
+                    "candidate_a_method": "ours_full",
+                    "candidate_b_method": "debate",
+                    "candidate_a_is_ours": "maybe",
+                    "candidate_b_is_ours": False,
+                },
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    checklist = build_reproducibility_checklist(
+        tmp_path,
+        ["outputs/full_run/human_audit/preference_mapping.json"],
+    )
+    check = next(check for check in checklist["checks"] if check["name"].endswith("preference_mapping.json:content"))
+
+    assert checklist["status"] == "failed"
+    assert check["status"] == "failed"
+    assert check["issues"][0]["issue"] == "expected_exactly_one_ours_candidate"
+    assert check["issues"][1]["issue"] == "invalid_ours_flags"
+
+
 def test_export_paper_artifacts_populates_manifest_from_shard_plan(tmp_path):
     (tmp_path / "configs").mkdir()
     (tmp_path / "configs" / "default.yaml").write_text(

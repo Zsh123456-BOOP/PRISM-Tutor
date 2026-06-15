@@ -263,8 +263,16 @@ def _content_checks(root: Path, rel_paths: list[str]) -> list[dict[str, Any]]:
             checks.append({"name": f"{rel}:content", "status": "passed" if rows > 0 else "failed", "rows": rows})
         elif rel.endswith("preference_mapping.json"):
             payload = _load_optional_json(path)
-            rows = len(payload) if isinstance(payload, list) else 0
-            checks.append({"name": f"{rel}:content", "status": "passed" if rows > 0 else "failed", "rows": rows})
+            rows = payload if isinstance(payload, list) else []
+            issues = _preference_mapping_issues(rows)
+            checks.append(
+                {
+                    "name": f"{rel}:content",
+                    "status": "passed" if rows and not issues else "failed",
+                    "rows": len(rows),
+                    "issues": issues,
+                }
+            )
         elif rel.endswith("sampling_manifest.json"):
             payload = _load_optional_json(path) or {}
             actual_n = _as_int(payload.get("actual_n")) or 0
@@ -294,11 +302,65 @@ def _count_jsonl_rows(path: Path) -> int:
         return 0
 
 
+def _preference_mapping_issues(rows: list[Any]) -> list[dict[str, Any]]:
+    issues: list[dict[str, Any]] = []
+    required = [
+        "audit_id",
+        "sample_id",
+        "dataset",
+        "candidate_a_method",
+        "candidate_b_method",
+        "candidate_a_is_ours",
+        "candidate_b_is_ours",
+    ]
+    for idx, row in enumerate(rows, 1):
+        if not isinstance(row, dict):
+            issues.append({"row_index": idx, "issue": "not_object"})
+            continue
+        missing = [field for field in required if row.get(field) in (None, "")]
+        if missing:
+            issues.append({"row_index": idx, "issue": "missing_fields", "fields": missing})
+            continue
+        a_is_ours = _as_bool(row.get("candidate_a_is_ours"))
+        b_is_ours = _as_bool(row.get("candidate_b_is_ours"))
+        if a_is_ours is None or b_is_ours is None:
+            issues.append(
+                {
+                    "row_index": idx,
+                    "issue": "invalid_ours_flags",
+                    "candidate_a_is_ours": row.get("candidate_a_is_ours"),
+                    "candidate_b_is_ours": row.get("candidate_b_is_ours"),
+                }
+            )
+            continue
+        if a_is_ours == b_is_ours:
+            issues.append(
+                {
+                    "row_index": idx,
+                    "issue": "expected_exactly_one_ours_candidate",
+                    "candidate_a_is_ours": a_is_ours,
+                    "candidate_b_is_ours": b_is_ours,
+                }
+            )
+    return issues
+
+
 def _judge_metadata_path(required_paths: list[str]) -> str:
     for rel in required_paths:
         if rel.endswith("judge_metadata.json"):
             return rel
     return "outputs/judge_scores/judge_metadata.json"
+
+
+def _as_bool(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"true", "1", "yes", "y"}:
+        return True
+    if text in {"false", "0", "no", "n"}:
+        return False
+    return None
 
 
 def _load_optional_json(path: Path) -> dict[str, Any] | None:
