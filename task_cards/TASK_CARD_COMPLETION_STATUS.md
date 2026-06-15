@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-本仓库已经具备 Task Card 01-16 的可运行代码骨架、mock/dry-run 端到端链路，以及服务器上的 Qwen3-8B vLLM live smoke 链路。MathDial、Bridge 与 MaE Math Misconceptions 三个真实数据集均已下载、传输到服务器并完成 schema build。Exp0-Exp6 已完成真实 Qwen live smoke（limit=1）与 downstream metrics/tables/figures/artifact smoke；真实 DeepSeek judge 已对 live smoke 123 条 generation 完成评分。runner 已支持 sample-level sharding，用于拆分全量正式实验，并已支持 `maintain --target-running N` 与 `supervise` 可恢复补齐后台并发。全量完成后可用 `scripts/12_finalize_full_run.py` gated finalization 生成 metrics/tables/figures/human audit sample/paper artifacts；finalization manifest/stdout 会输出 completed/total/can_finalize/planned_steps，并会把每个后处理 step 的 stdout/stderr 保存到 `outputs/full_run/logs/finalization`；paper artifact exporter 会检查 `outputs/full_run/*` run-local 产物；human audit sampler 会在正式模式下要求 metrics、generation logs、judge scores 和 tables 全部存在，并用 generation logs 回填 blind CSV 所需 response/context 字段；finalization 支持人工标注完成后用 `--run-human-agreement` 在 paper artifact 前生成 run-local agreement report；table builder 会从 record metrics 自动导出 Table 1-6 及 significance JSON；paper artifact exporter 可用 full-run shard plan 生成覆盖 Exp0-Exp6 的 experiment manifest，并记录 datasets、split、methods、job count、estimated records 和输出路径；reproducibility checklist 会记录 seed/config/model/generation、GPU、judge metadata、data/log paths、git 和 package versions；`scripts/11_plan_or_run_shards.py progress` 可从 supervisor log 输出完成率、近期吞吐、ETA 与 health summary，并可识别 running 超过 supervisor target 的情况。当前全量 Exp0-Exp6 正式实验已经开始运行并由服务器 supervisor 接管，但尚未完成；也尚未执行正式人工标注版 200 条 blind human audit。
+本仓库已经具备 Task Card 01-16 的可运行代码骨架、mock/dry-run 端到端链路，以及服务器上的 Qwen3-8B vLLM live smoke 链路。MathDial、Bridge 与 MaE Math Misconceptions 三个真实数据集均已下载、传输到服务器并完成 schema build。Exp0-Exp6 已完成真实 Qwen live smoke（limit=1）与 downstream metrics/tables/figures/artifact smoke；真实 DeepSeek judge 已对 live smoke 123 条 generation 完成评分。runner 已支持 sample-level sharding，用于拆分全量正式实验，并已支持 `maintain --target-running N` 与 `supervise` 可恢复补齐后台并发。PRISM runtime 现在会从 `configs/default.yaml` 注入 risk weights、thresholds、budget 与 commit threshold；Exp5 ablation 会真实禁用或替换对应模块/风险信号；Exp6 robustness 会展开 noisy-agent probability × token budget 变体，并把 deterministic noisy injection 参数写入 raw log。全量完成后可用 `scripts/12_finalize_full_run.py` gated finalization 生成 metrics/tables/figures/human audit sample/paper artifacts；finalization manifest/stdout 会输出 completed/total/can_finalize/planned_steps，并会把每个后处理 step 的 stdout/stderr 保存到 `outputs/full_run/logs/finalization`；paper artifact exporter 会检查 `outputs/full_run/*` run-local 产物；human audit sampler 会在正式模式下要求 metrics、generation logs、judge scores 和 tables 全部存在，并用 generation logs 回填 blind CSV 所需 response/context 字段；finalization 支持人工标注完成后用 `--run-human-agreement` 在 paper artifact 前生成 run-local agreement report；table builder 会从 record metrics 自动导出 Table 1-6 及 significance JSON；paper artifact exporter 可用 full-run shard plan 生成覆盖 Exp0-Exp6 的 experiment manifest，并记录 datasets、split、methods、job count、estimated records 和输出路径；reproducibility checklist 会记录 seed/config/model/generation、GPU、judge metadata、data/log paths、git 和 package versions；`scripts/11_plan_or_run_shards.py progress` 可从 supervisor log 输出完成率、近期吞吐、ETA 与 health summary，并可识别 running 超过 supervisor target 的情况。当前全量 Exp0-Exp6 正式实验已经开始运行并由服务器 supervisor 接管，但尚未完成；也尚未执行正式人工标注版 200 条 blind human audit。
 
 ## 已完成的代码路径
 
@@ -26,7 +26,7 @@
 ## 已验证命令
 
 - [x] 本机 `python -m compileall prism_tutor scripts data serving tests`
-- [x] 本机 `python -m pytest -q`，结果：74 passed。
+- [x] 本机 `python -m pytest -q`，结果：80 passed。
 - [x] 服务器 `python -m pytest -q`，结果：73 passed。
 - [x] `python scripts/00_prepare_env_check.py --config configs/default.yaml --dry-run`
 - [x] `python scripts/01_build_datasets.py --help`
@@ -62,6 +62,7 @@
 - [x] Reproducibility checklist coverage：`scripts/09_export_paper_artifacts.py` 导出的 checklist 包含 seed、config、model、GPU、judge metadata、data/log paths、git 和 package versions。
 - [x] Experiment manifest shard-plan coverage：`scripts/09_export_paper_artifacts.py --shard-plan` 可从 full-run shard plan 生成 Exp0-Exp6 manifest 元数据，并过滤无 experiment/name 的旧日志 manifest。
 - [x] Table export coverage：`scripts/05_make_tables.py` 可自动生成 `table1_main_results` 至 `table6_robustness` 的 CSV/TeX，并写出 paired significance JSON。
+- [x] Exp5/Exp6 runtime variant coverage：Exp5 ablation 会真实禁用 risk estimator、QoS routing、budget controller、state commit 或对应风险项；Exp6 dry-run smoke 验证 `fixed_4/debate/generic_sparse/ours_full × noise{0.2,0.4} × budget{1000,2000,4000}` 展开为 24 个 method variants。
 - [x] Shard progress report：`python scripts/11_plan_or_run_shards.py progress --plan outputs/full_run/shard_plan.json --supervisor-log outputs/full_run/logs/shards/supervisor_compact.jsonl --rate-window 5` 已在服务器验证，health summary 当前为 `ok`，并记录 `target_running`。
 - [x] 正式 full_run 后台运行：已完成 86 个 shard，18 个 shard 正在 running；最近检查 generation_rows `8695`、error_rows `0`，GPU2/GPU3 均 100% utilization，health summary 为 `ok`。
 

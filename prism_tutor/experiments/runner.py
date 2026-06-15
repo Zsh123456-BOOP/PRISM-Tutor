@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from itertools import product
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -12,7 +13,10 @@ from prism_tutor.experiments.experiment_matrix import ExperimentSpec, get_experi
 from prism_tutor.experiments.method_registry import MethodSpec, default_method_registry
 from prism_tutor.logging.jsonl_logger import JsonlLogger
 from prism_tutor.runtime.graph_state import TutorGraphState
-from prism_tutor.runtime.prism_graph import AGENT_REGISTRY, build_prism_graph
+from prism_tutor.runtime.budget_controller import BudgetConfig
+from prism_tutor.runtime.prism_graph import AGENT_REGISTRY, PrismGraphConfig, build_prism_graph
+from prism_tutor.runtime.risk_estimator import RiskConfig
+from prism_tutor.runtime.state_commit import CommitConfig
 from prism_tutor.logging.manifest import write_experiment_manifest
 from prism_tutor.serving.endpoints import EndpointRegistry, strip_think_blocks
 from prism_tutor.utils.config import deep_merge, load_config, load_yaml
@@ -120,6 +124,39 @@ def _resolve_run_plan(options: RunnerOptions) -> tuple[dict[str, Any], Experimen
     return config, experiment_spec, methods, datasets, split or "test"
 
 
+def _variant_value_slug(value: Any) -> str:
+    return str(value).replace(".", "p").replace("/", "_")
+
+
+def _expand_method_specs(methods: list[MethodSpec], experiment_spec: ExperimentSpec | None, config: dict[str, Any]) -> list[MethodSpec]:
+    if experiment_spec is None or experiment_spec.name != "exp6_robustness":
+        return methods
+    probabilities = experiment_spec.extra.get("noisy_agent_probabilities") or [0.0]
+    budgets = experiment_spec.extra.get("token_budgets") or [config.get("budget", {}).get("max_tokens_per_case")]
+    seed = int(config.get("seed", 42))
+    expanded: list[MethodSpec] = []
+    for method, probability, token_budget in product(methods, probabilities, budgets):
+        variant = {
+            **method.variant,
+            "base_method": method.name,
+            "robustness": True,
+            "noisy_agent_probability": float(probability),
+            "token_budget": int(token_budget),
+            "seed": seed,
+        }
+        expanded.append(
+            replace(
+                method,
+                name=(
+                    f"{method.name}__noise{_variant_value_slug(probability)}"
+                    f"__budget{_variant_value_slug(token_budget)}"
+                ),
+                variant=variant,
+            )
+        )
+    return expanded
+
+
 def _output_paths(options: RunnerOptions, methods: list[str], datasets: list[str], split: str) -> dict[str, Path]:
     output_dir = Path(options.output_dir)
     run_id = options.run_id or f"{options.experiment or 'generation'}_{_slug(datasets)}_{split}_{_slug(methods)}_{_timestamp()}"
@@ -152,6 +189,56 @@ def _max_tokens_from_config(config: dict[str, Any]) -> int:
         candidates = [int(item) for item in value.values() if isinstance(item, int | float)]
         return max(candidates) if candidates else 1024
     return int(value)
+
+
+def _prism_graph_config_from_run_config(config: dict[str, Any], method: MethodSpec) -> PrismGraphConfig:
+    thresholds = config.get("thresholds", {})
+    budget = config.get("budget", {})
+    weights = dict(config.get("risk_weights", {}))
+    if not weights:
+        weights = RiskConfig().weights
+    risk_config = RiskConfig(
+        weights=weights,
+        low_threshold=float(thresholds.get("medium_risk", thresholds.get("low_risk", 0.33))),
+        high_threshold=float(thresholds.get("high_risk", 0.66)),
+    )
+    graph_config = PrismGraphConfig(
+        risk=risk_config,
+        budget=BudgetConfig(
+            max_rounds=int(budget.get("max_rounds", 2)),
+            max_tokens=int(method.variant.get("token_budget", budget.get("max_tokens_per_case", 20000))),
+        ),
+        commit=CommitConfig(
+            commit_confidence_threshold=float(thresholds.get("misconception_confidence_commit", 0.7)),
+            tentative_confidence_threshold=float(thresholds.get("state_conflict_block_threshold", 0.4)),
+        ),
+        variant=method.variant,
+        noisy_agent_probability=float(method.variant.get("noisy_agent_probability", 0.0)),
+        noisy_agent_seed=int(method.variant.get("seed", config.get("seed", 42))),
+    )
+    ablation = str(method.variant.get("ablation", ""))
+    if ablation == "ablate_risk_estimator":
+        graph_config.disabled_modules.append("risk_estimator")
+    elif ablation == "ablate_qos_routing":
+        graph_config.disabled_modules.append("qos_routing")
+    elif ablation == "ablate_budget_controller":
+        graph_config.disabled_modules.append("budget_controller")
+    elif ablation == "ablate_state_commit":
+        graph_config.disabled_modules.append("state_commit")
+    elif ablation == "ablate_leakage_risk":
+        graph_config.disabled_risks.append("leakage_risk")
+    elif ablation == "ablate_misconception_risk":
+        graph_config.disabled_risks.append("misconception_risk")
+    elif ablation == "ablate_state_conflict_risk":
+        graph_config.disabled_risks.append("state_conflict_risk")
+    elif ablation == "ablate_confidence_weighted_commit":
+        graph_config.commit.commit_confidence_threshold = 0.0
+        graph_config.commit.tentative_confidence_threshold = 0.0
+    elif ablation == "replace_pedagogical_risk_with_difficulty":
+        graph_config.force_difficulty_only_risk = True
+    elif ablation == "replace_two_phase_commit_with_naive_memory":
+        graph_config.naive_memory_commit = True
+    return graph_config
 
 
 def _llm_client_from_config(config: dict[str, Any]) -> BaseLLMClient:
@@ -241,6 +328,7 @@ def _state_to_method_result(state: TutorGraphState, *, method: MethodSpec) -> di
     return {
         "selected_agents": state.selected_agents or list(method.selected_agents),
         "rounds": max(method.rounds, state.rounds),
+        "method_variant": method.variant,
         "risk_scores": state.risk_scores,
         "messages": [
             {"role": "agent", "agent_name": call.get("agent_name", ""), "content": call.get("stripped_output", "")}
@@ -256,16 +344,21 @@ def _state_to_method_result(state: TutorGraphState, *, method: MethodSpec) -> di
     }
 
 
-def _run_live_prism(sample: dict[str, Any], method: MethodSpec, client: BaseLLMClient) -> dict[str, Any]:
+def _base_method_name(method: MethodSpec) -> str:
+    return str(method.variant.get("base_method", method.name))
+
+
+def _run_live_prism(sample: dict[str, Any], method: MethodSpec, client: BaseLLMClient, config: dict[str, Any]) -> dict[str, Any]:
     method_map = {"ours_routing": "M1", "ours_routing_budget": "M2", "ours_full": "M3"}
-    graph_method = method_map.get(method.name, "M3")
-    graph = build_prism_graph(method=graph_method, client=client)
+    graph_method = method_map.get(_base_method_name(method), "M3")
+    graph = build_prism_graph(method=graph_method, client=client, config=_prism_graph_config_from_run_config(config, method))
     state = graph.invoke(TutorGraphState(sample=sample, method=method.name))
     return _state_to_method_result(state, method=method)
 
 
 def _run_live_baseline(sample: dict[str, Any], method: MethodSpec, client: BaseLLMClient) -> dict[str, Any]:
     state = TutorGraphState(sample=sample, method=method.name, rounds=method.rounds)
+    state.agent_outputs.setdefault("runtime_variant", []).append(method.variant)
     state.selected_agents.extend(method.selected_agents)
     for selected_agent in method.selected_agents:
         agent_name = _callable_agent_name(selected_agent)
@@ -287,13 +380,21 @@ def _run_live_baseline(sample: dict[str, Any], method: MethodSpec, client: BaseL
             client=client,
             method=method.name,
         )
+        if method.variant.get("noisy_agent_probability"):
+            graph_config = PrismGraphConfig(
+                variant=method.variant,
+                noisy_agent_probability=float(method.variant["noisy_agent_probability"]),
+                noisy_agent_seed=int(method.variant.get("seed", 42)),
+            )
+            build_prism_graph(client=client, config=graph_config)._maybe_inject_noisy_output(state, record)
         state.add_call(record)
     return _state_to_method_result(state, method=method)
 
 
-def _run_live_method(sample: dict[str, Any], method: MethodSpec, client: BaseLLMClient) -> dict[str, Any]:
-    if method.name.startswith("ours_") or method.family == "ablation":
-        return _run_live_prism(sample, method, client)
+def _run_live_method(sample: dict[str, Any], method: MethodSpec, client: BaseLLMClient, config: dict[str, Any]) -> dict[str, Any]:
+    base_name = _base_method_name(method)
+    if base_name.startswith("ours_") or method.family == "ablation":
+        return _run_live_prism(sample, method, client, config)
     return _run_live_baseline(sample, method, client)
 
 
@@ -322,6 +423,7 @@ def _success_record(
         "split": sample["split"],
         "method": method.name,
         "method_family": method.family,
+        "method_variant": method.variant,
         "base_model": config.get("model", {}).get("generator"),
         "endpoint": endpoint.as_dict(),
         "generation_config": _generation_config(config),
@@ -357,6 +459,7 @@ def _failure_record(
         "split": sample.get("split"),
         "method": method.name,
         "method_family": method.family,
+        "method_variant": method.variant,
         "base_model": config.get("model", {}).get("generator"),
         "endpoint": endpoint.as_dict() if endpoint else None,
         "generation_config": _generation_config(config),
@@ -380,7 +483,8 @@ def run_generation(options: RunnerOptions) -> dict[str, Any]:
     _validate_shard_options(options.num_shards, options.shard_index)
     config, experiment_spec, method_names, datasets, split = _resolve_run_plan(options)
     registry = default_method_registry()
-    methods = registry.resolve(method_names)
+    base_methods = registry.resolve(method_names)
+    methods = _expand_method_specs(base_methods, experiment_spec, config)
     endpoint_registry = EndpointRegistry.from_config(config)
     llm_client = _llm_client_from_config(config) if options.live_llm else None
     paths = _output_paths(options, method_names, datasets, split)
@@ -416,7 +520,7 @@ def run_generation(options: RunnerOptions) -> dict[str, Any]:
                     try:
                         started = time.perf_counter()
                         if llm_client is not None:
-                            result = _run_live_method(sample, method, llm_client)
+                            result = _run_live_method(sample, method, llm_client, config)
                         else:
                             result = method.run(sample, {"config": config, "endpoint": endpoint, "sample_index": sample_index})
                         record = _success_record(
@@ -443,7 +547,8 @@ def run_generation(options: RunnerOptions) -> dict[str, Any]:
             "experiment": experiment_spec.name if experiment_spec else options.experiment,
             "datasets": datasets,
             "split": split,
-            "methods": method_names,
+            "methods": [method.name for method in methods],
+            "base_methods": method_names,
             "limit": options.limit,
             "resume": options.resume,
             "live_llm": options.live_llm,

@@ -59,6 +59,19 @@ class StateCommitter:
             decision.status = "rejected"
         return decision
 
+    def commit_naive(self, state: TutorGraphState) -> CommitDecision:
+        """Apply the latest state-manager updates without verifier or confidence gating."""
+        state_manager_outputs = state.agent_outputs.get("state_manager") or []
+        if not state_manager_outputs:
+            return CommitDecision(status="no_updates")
+        state.state_before.append(state.student_state.model_dump(mode="json"))
+        decision = CommitDecision(status="naive_committed")
+        for update in state_manager_outputs[-1].get("proposed_updates", []):
+            self._apply_update(state.student_state, update)
+            decision.committed_updates.append(deepcopy(update))
+        state.state_after.append(state.student_state.model_dump(mode="json"))
+        return decision
+
     def _tentative_all(self, state: TutorGraphState, reason: str) -> CommitDecision:
         latest = (state.agent_outputs.get("state_manager") or [{}])[-1]
         updates = [deepcopy(update) for update in latest.get("proposed_updates", [])]

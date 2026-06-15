@@ -7,7 +7,14 @@ from prism_tutor.experiments.experiment_matrix import load_experiment_matrix
 from prism_tutor.experiments.method_registry import default_method_registry
 import pytest
 
-from prism_tutor.experiments.runner import RunnerOptions, load_samples, run_generation
+from prism_tutor.experiments.runner import (
+    RunnerOptions,
+    _expand_method_specs,
+    _prism_graph_config_from_run_config,
+    load_samples,
+    run_generation,
+)
+from prism_tutor.utils.config import load_config
 
 
 REQUIRED_FIELDS = {
@@ -51,6 +58,34 @@ def test_experiment_matrix_loads_exp0_to_exp6() -> None:
         "exp6_robustness",
     } <= set(matrix)
     assert matrix["exp6_robustness"].extra["noisy_agent_probabilities"] == [0.2, 0.4]
+
+
+def test_exp6_methods_expand_across_noise_and_token_budgets() -> None:
+    matrix = load_experiment_matrix()
+    registry = default_method_registry()
+    base_methods = registry.resolve(matrix["exp6_robustness"].methods)
+
+    expanded = _expand_method_specs(base_methods, matrix["exp6_robustness"], {"seed": 42})
+
+    assert len(expanded) == len(base_methods) * 2 * 3
+    assert expanded[0].variant["base_method"] == "fixed_4"
+    assert expanded[0].variant["robustness"] is True
+    assert expanded[0].variant["noisy_agent_probability"] == 0.2
+    assert expanded[0].variant["token_budget"] == 1000
+    assert expanded[0].name.startswith("fixed_4__noise0p2__budget1000")
+
+
+def test_prism_graph_config_uses_default_yaml_and_ablation_variant() -> None:
+    registry = default_method_registry()
+    method = registry.get("ablate_leakage_risk")
+    config = _prism_graph_config_from_run_config(load_config(), method)
+
+    assert config.risk.weights["misconception_risk"] == 0.30
+    assert config.risk.low_threshold == 0.55
+    assert config.risk.high_threshold == 0.75
+    assert config.budget.max_rounds == 3
+    assert config.budget.max_tokens == 4000
+    assert config.disabled_risks == ["leakage_risk"]
 
 
 def test_runner_writes_smoke_generation_jsonl_and_manifest(tmp_path: Path) -> None:

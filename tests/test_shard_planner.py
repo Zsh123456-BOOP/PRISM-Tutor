@@ -58,6 +58,43 @@ def test_build_plan_estimates_records_by_shard(tmp_path: Path) -> None:
     assert "--resume" in plan["jobs"][0]["argv"]
 
 
+def test_build_plan_expands_exp6_robustness_factor(tmp_path: Path) -> None:
+    experiments = tmp_path / "experiments.yaml"
+    experiments.write_text(
+        json.dumps(
+            {
+                "experiments": {
+                    "exp6_robustness": {
+                        "datasets": ["mathdial"],
+                        "split": "test",
+                        "methods": ["fixed_4", "ours_full"],
+                        "noisy_agent_probabilities": [0.2, 0.4],
+                        "token_budgets": [1000, 2000, 4000],
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    _write_jsonl(tmp_path / "splits" / "mathdial_test.jsonl", [{"sample_id": f"m{i}"} for i in range(5)])
+
+    plan = shard_planner.build_plan(
+        experiments_config=str(experiments),
+        split_dir=str(tmp_path / "splits"),
+        output_dir=str(tmp_path / "out"),
+        num_shards=1,
+        experiments=["exp6_robustness"],
+        live_llm=False,
+        resume=True,
+        limit=None,
+    )
+
+    assert plan["jobs"][0]["base_method_count"] == 2
+    assert plan["jobs"][0]["method_count"] == 12
+    assert plan["jobs"][0]["estimated_records"] == 60
+    assert plan["estimated_records"] == 60
+
+
 def test_status_report_reads_manifest_and_partial_rows(tmp_path: Path) -> None:
     plan = {
         "jobs": [

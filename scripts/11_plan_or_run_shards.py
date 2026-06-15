@@ -45,6 +45,15 @@ def _filter_experiments(experiments: dict[str, Any], names: list[str] | None) ->
     return {name: experiments[name] for name in names}
 
 
+def _expanded_method_count(experiment: str, spec: dict[str, Any]) -> int:
+    method_count = len(spec["methods"])
+    if experiment != "exp6_robustness":
+        return method_count
+    probabilities = spec.get("noisy_agent_probabilities") or [0.0]
+    token_budgets = spec.get("token_budgets") or [None]
+    return method_count * len(probabilities) * len(token_budgets)
+
+
 def build_plan(
     *,
     experiments_config: str,
@@ -63,7 +72,7 @@ def build_plan(
     jobs = []
     for experiment, spec in matrix.items():
         split = spec.get("split", "test")
-        method_count = len(spec["methods"])
+        method_count = _expanded_method_count(experiment, spec)
         for shard_index in range(num_shards):
             run_id = f"{experiment}_shard{shard_index:03d}-of-{num_shards:03d}"
             estimated_samples = sum(
@@ -98,6 +107,7 @@ def build_plan(
                     "split": split,
                     "datasets": spec["datasets"],
                     "method_count": method_count,
+                    "base_method_count": len(spec["methods"]),
                     "num_shards": num_shards,
                     "shard_index": shard_index,
                     "estimated_samples": estimated_samples,
