@@ -1,4 +1,5 @@
 import os
+import json
 
 import pytest
 
@@ -52,3 +53,49 @@ def test_parse_score_json_and_merge_leakage():
     assert merged["judge_leakage"] is False
     assert merged["final_leakage"] is True
     assert merged["leakage_conflict"] is True
+
+
+def test_real_judge_request_uses_json_response_format(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    monkeypatch.setenv("PRISM_TUTOR_ENABLE_REAL_JUDGE", "1")
+    captured = {}
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def read(self):
+            return json.dumps(
+                {
+                    "model": "deepseek-v4-pro",
+                    "choices": [
+                        {
+                            "message": {
+                                "content": (
+                                    '{"mathematical_correctness": 4, "pedagogical_quality": 4, '
+                                    '"scaffolding_quality": 4, "misconception_coverage": 4, '
+                                    '"answer_leakage": false, "clarity": 4, '
+                                    '"student_facing_appropriateness": 4, "overall": 4, "reason": "ok"}'
+                                )
+                            }
+                        }
+                    ],
+                }
+            ).encode("utf-8")
+
+    def fake_urlopen(request, timeout):
+        captured["body"] = json.loads(request.data.decode("utf-8"))
+        captured["authorization"] = request.headers.get("Authorization")
+        return FakeResponse()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    client = make_judge_client(JudgeClientConfig(provider="deepseek", retries=0))
+    result = client.judge({"sample_id": "s1", "candidate_response": "Try again."})
+
+    assert captured["body"]["response_format"] == {"type": "json_object"}
+    assert result["parsed_score"]["overall"] == 4.0
+    assert result["raw_attempts"][0]["error"] is None
+    assert "sk-test" not in str(result)

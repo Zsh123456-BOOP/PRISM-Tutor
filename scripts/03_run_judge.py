@@ -23,6 +23,17 @@ def _input_files(path: str | Path) -> list[Path]:
     return [p]
 
 
+def _sample_from_row(row: dict) -> dict:
+    state = row.get("state") if isinstance(row.get("state"), dict) else {}
+    sample = state.get("sample") if isinstance(state.get("sample"), dict) else {}
+    return sample
+
+
+def _metadata_from_sample(sample: dict) -> dict:
+    metadata = sample.get("metadata") if isinstance(sample.get("metadata"), dict) else {}
+    return metadata
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run mock-safe LLM judge over generation logs.")
     parser.add_argument("--input", default="outputs/generations")
@@ -52,10 +63,21 @@ def main() -> int:
 
     judged = []
     for row in rows:
+        sample = _sample_from_row(row)
+        metadata = _metadata_from_sample(sample)
         case = {
             **row,
+            "problem": row.get("problem") or row.get("problem_text") or sample.get("problem_text") or sample.get("question"),
+            "student_answer": row.get("student_answer") or sample.get("student_utterance"),
             "candidate_response": row.get("final_response"),
-            "ground_truth": row.get("ground_truth") or row.get("answer"),
+            "ground_truth": (
+                row.get("ground_truth")
+                or row.get("answer")
+                or sample.get("ground_truth")
+                or metadata.get("ground_truth")
+                or metadata.get("correct_answer")
+            ),
+            "gold_context": row.get("gold_context") or sample.get("misconception_label") or sample.get("student_error"),
         }
         judged.append(client.judge(case))
 

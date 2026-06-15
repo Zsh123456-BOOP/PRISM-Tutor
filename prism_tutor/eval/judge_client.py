@@ -86,11 +86,13 @@ class DeepSeekJudgeClient(MockJudgeClient):
             "temperature": self.config.temperature,
             "top_p": self.config.top_p,
             "max_tokens": self.config.max_tokens,
+            "response_format": {"type": "json_object"},
         }
         raw_response = ""
         error = None
         parsed_score = None
         actual_model = self.config.requested_model
+        attempts: list[dict[str, Any]] = []
         for attempt in range(self.config.retries + 1):
             try:
                 request = urllib.request.Request(
@@ -106,17 +108,20 @@ class DeepSeekJudgeClient(MockJudgeClient):
                     payload = json.loads(response.read().decode("utf-8"))
                 actual_model = payload.get("model") or actual_model
                 raw_response = payload["choices"][0]["message"]["content"]
+                attempts.append({"attempt": attempt, "raw_response": raw_response, "error": None})
                 parsed_score = parse_score_json(raw_response).to_dict()
                 error = None
                 break
             except Exception as exc:  # pragma: no cover - network path is opt-in.
                 error = f"attempt={attempt}: {type(exc).__name__}: {exc}"
+                attempts.append({"attempt": attempt, "raw_response": raw_response, "error": error})
         return {
             "sample_id": case.get("sample_id"),
             "dataset": case.get("dataset"),
             "method": case.get("method"),
             "prompt": prompt,
             "raw_response": raw_response,
+            "raw_attempts": attempts,
             "parsed_score": parsed_score,
             "latency": time.time() - started,
             "error": error,
