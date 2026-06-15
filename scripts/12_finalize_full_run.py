@@ -44,6 +44,12 @@ def _require_complete(summary: dict[str, Any], allow_incomplete: bool) -> None:
             "Full run is not complete: "
             + json.dumps({"completed": completed, "incomplete": incomplete}, ensure_ascii=False, sort_keys=True)
         )
+    error_rows = int(summary.get("error_rows") or 0)
+    if error_rows and not allow_incomplete:
+        raise SystemExit(
+            "Full run has generation error rows: "
+            + json.dumps({"error_rows": error_rows}, ensure_ascii=False, sort_keys=True)
+        )
 
 
 def _completion_summary(summary: dict[str, Any]) -> dict[str, Any]:
@@ -195,6 +201,32 @@ def _run_command(step: dict[str, Any], dry_run: bool, log_dir: str | Path | None
     }
 
 
+def _skipped_step(step: dict[str, Any], reason: str) -> dict[str, Any]:
+    now = datetime.now(timezone.utc).isoformat()
+    return {
+        "name": step["name"],
+        "argv": step["argv"],
+        "status": "skipped",
+        "skip_reason": reason,
+        "started_at_utc": now,
+        "finished_at_utc": now,
+    }
+
+
+def _run_steps(commands: list[dict[str, Any]], dry_run: bool, log_dir: str | Path | None = None) -> list[dict[str, Any]]:
+    steps: list[dict[str, Any]] = []
+    failed_step: str | None = None
+    for command in commands:
+        if failed_step is not None and not dry_run:
+            steps.append(_skipped_step(command, f"previous step failed: {failed_step}"))
+            continue
+        result = _run_command(command, dry_run, log_dir)
+        steps.append(result)
+        if result["status"] == "failed":
+            failed_step = str(command["name"])
+    return steps
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--plan", default="outputs/full_run/shard_plan.json")
@@ -216,7 +248,7 @@ def main(argv: list[str] | None = None) -> int:
     completion = _completion_summary(summary)
     commands = build_commands(args)
     step_log_dir = args.step_log_dir or str(Path(args.output_dir) / "logs" / "finalization")
-    steps = [_run_command(step, args.dry_run, step_log_dir) for step in commands]
+    steps = _run_steps(commands, args.dry_run, step_log_dir)
     planned_steps = [step["name"] for step in steps]
     status = "planned" if args.dry_run else ("completed" if all(step["status"] == "completed" for step in steps) else "failed")
     manifest = {

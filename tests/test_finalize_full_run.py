@@ -14,15 +14,19 @@ assert SPEC and SPEC.loader
 SPEC.loader.exec_module(finalize)
 
 
-def _write_plan(tmp_path: Path, statuses: list[str]) -> Path:
+def _write_plan(tmp_path: Path, statuses: list[str], *, error_jobs: set[int] | None = None) -> Path:
+    error_jobs = error_jobs or set()
     jobs = []
     for index, status in enumerate(statuses):
         job_id = f"job{index}"
         generation_path = tmp_path / f"{job_id}.jsonl"
         manifest_path = tmp_path / f"{job_id}.manifest.json"
+        error_path = tmp_path / f"{job_id}.errors.jsonl"
         if status == "completed":
             generation_path.write_text(json.dumps({"sample_id": job_id}) + "\n", encoding="utf-8")
             manifest_path.write_text(json.dumps({"status": "completed", "run": {"counts": {"succeeded": 1}}}), encoding="utf-8")
+        if index in error_jobs:
+            error_path.write_text(json.dumps({"sample_id": job_id, "error": "boom"}) + "\n", encoding="utf-8")
         jobs.append(
             {
                 "job_id": job_id,
@@ -32,7 +36,7 @@ def _write_plan(tmp_path: Path, statuses: list[str]) -> Path:
                 "estimated_records": 1,
                 "paths": {
                     "generations": str(generation_path),
-                    "errors": str(tmp_path / f"{job_id}.errors.jsonl"),
+                    "errors": str(error_path),
                     "manifest": str(manifest_path),
                     "pid": str(tmp_path / f"{job_id}.pid"),
                 },
@@ -52,6 +56,17 @@ def test_finalize_refuses_incomplete_plan_without_override(tmp_path: Path) -> No
         assert "Full run is not complete" in str(exc)
     else:
         raise AssertionError("Expected incomplete full run to fail")
+
+
+def test_finalize_refuses_error_rows_without_override(tmp_path: Path) -> None:
+    plan = _write_plan(tmp_path, ["completed"], error_jobs={0})
+
+    try:
+        finalize.main(["--plan", str(plan), "--manifest", str(tmp_path / "manifest.json"), "--dry-run"])
+    except SystemExit as exc:
+        assert "generation error rows" in str(exc)
+    else:
+        raise AssertionError("Expected full run with error rows to fail")
 
 
 def test_finalize_dry_run_writes_planned_manifest(tmp_path: Path) -> None:
@@ -112,6 +127,32 @@ def test_finalize_run_command_preserves_stdout_stderr_logs(tmp_path: Path) -> No
     assert result["returncode"] == 3
     assert Path(result["stdout_log"]).read_text(encoding="utf-8").strip() == "visible stdout"
     assert Path(result["stderr_log"]).read_text(encoding="utf-8").strip() == "visible stderr"
+
+
+def test_finalize_run_steps_fail_fast_and_marks_later_steps_skipped(tmp_path: Path) -> None:
+    commands = [
+        {
+            "name": "first",
+            "argv": [
+                sys.executable,
+                "-c",
+                "import sys; print('first failed'); sys.exit(2)",
+            ],
+        },
+        {
+            "name": "second",
+            "argv": [
+                sys.executable,
+                "-c",
+                "from pathlib import Path; Path('should_not_exist').write_text('bad')",
+            ],
+        },
+    ]
+
+    results = finalize._run_steps(commands, dry_run=False, log_dir=tmp_path / "logs")
+
+    assert [result["status"] for result in results] == ["failed", "skipped"]
+    assert results[1]["skip_reason"] == "previous step failed: first"
 
 
 def test_finalize_only_adds_judge_when_requested(tmp_path: Path) -> None:
