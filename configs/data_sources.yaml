@@ -13,13 +13,18 @@ datasets:
     notes: Official MathDial dataset repository with train/test JSONL files.
 
   bridge:
-    source_type: manual_required
+    source_type: github_files
+    repo: rosewang2008/bridge
+    ref: main
     raw_path: data/raw/bridge
-    expected_files: "*.jsonl, *.json, or *.csv"
-    notes: >
-      The project plan describes a 700-conversation Bridge tutoring dataset with
-      student error, remediation strategy, and teacher intention annotations, but
-      does not provide a verifiable public download URL or repository id.
+    files:
+      - source_path: dataset/train.json
+        target_name: train.json
+      - source_path: dataset/validation.json
+        target_name: validation.json
+      - source_path: dataset/test.json
+        target_name: test.json
+    notes: Bridge dataset from rosewang2008/bridge, dataset directory.
 
   misconception:
     source_type: manual_required

@@ -111,12 +111,13 @@ def load_bridge(raw_path: str | Path) -> list[dict[str, Any]]:
         values = {
             "conversation_id": first_present(
                 raw_record,
-                ("conversation_id", "dialogue_id", "dialog_id", "id"),
+                ("conversation_id", "dialogue_id", "dialog_id", "id", "c_id"),
             ),
             "problem_text": first_present(
                 raw_record,
                 ("problem_text", "problem", "question", "math_problem", "prompt", "context"),
-            ),
+            )
+            or _bridge_problem_text(raw_record),
             "student_utterance": first_present(
                 raw_record,
                 (
@@ -126,10 +127,13 @@ def load_bridge(raw_path: str | Path) -> list[dict[str, Any]]:
                     "student",
                     "learner_response",
                 ),
-            ),
+            )
+            or _last_bridge_utterance(raw_record, user="student"),
+            "tutor_response": first_present(raw_record, ("tutor_response", "teacher_response", "gold_response"))
+            or _join_bridge_messages(first_present(raw_record, ("c_r_", "c_revision", "c_r")), user="tutor"),
             "student_error": first_present(
                 raw_record,
-                ("student_error", "error_type", "error", "misstep", "bug", "label"),
+                ("student_error", "error_type", "error", "misstep", "bug", "label", "e"),
             ),
             "remediation_strategy": first_present(
                 raw_record,
@@ -139,20 +143,26 @@ def load_bridge(raw_path: str | Path) -> list[dict[str, Any]]:
                     "strategy",
                     "feedback_strategy",
                     "intervention",
+                    "z_what",
                 ),
             ),
             "teacher_intention": first_present(
                 raw_record,
-                ("teacher_intention", "teacher_intent", "intention", "goal", "teaching_goal"),
+                ("teacher_intention", "teacher_intent", "intention", "goal", "teaching_goal", "z_why"),
             ),
         }
+        metadata = _metadata(raw_record, official_split=_split_from_source_file(source_file))
+        for key in ("lesson_topic", "c_h", "c_r", "c_r_", "c_revision"):
+            value = raw_record.get(key)
+            if value not in (None, ""):
+                metadata[key] = value
         records.append(
             make_record(
                 dataset="bridge",
                 raw_record_id=raw_record_id,
                 values=values,
                 source_file=str(source_file),
-                metadata=_metadata(raw_record),
+                metadata=metadata,
             )
         )
     return records
@@ -271,6 +281,46 @@ def _iter_mathdial_string_samples(record: Mapping[str, Any], conversation: str) 
         sample = dict(base)
         sample["dialogue_text"] = conversation
         yield sample
+
+
+def _bridge_problem_text(record: Mapping[str, Any]) -> str | None:
+    topic = first_present(record, ("lesson_topic",))
+    history = first_present(record, ("c_h", "dialogue_history"))
+    history_text = _join_bridge_messages(history)
+    if topic and history_text:
+        return f"Lesson topic: {topic}\nDialogue history:\n{history_text}"
+    if topic:
+        return f"Lesson topic: {topic}"
+    return history_text
+
+
+def _last_bridge_utterance(record: Mapping[str, Any], *, user: str) -> str | None:
+    history = first_present(record, ("c_h", "dialogue_history"))
+    if not isinstance(history, list):
+        return None
+    for item in reversed(history):
+        if isinstance(item, Mapping) and str(item.get("user", "")).lower() == user:
+            text = item.get("text")
+            return str(text) if text not in (None, "") else None
+    return None
+
+
+def _join_bridge_messages(messages: Any, *, user: str | None = None) -> str | None:
+    if not isinstance(messages, list):
+        return None
+    parts: list[str] = []
+    for item in messages:
+        if not isinstance(item, Mapping):
+            continue
+        speaker = str(item.get("user", "")).lower()
+        if user is not None and speaker != user:
+            continue
+        text = item.get("text")
+        if text in (None, ""):
+            continue
+        prefix = speaker.title() if speaker else "Turn"
+        parts.append(f"{prefix}: {text}")
+    return "\n".join(parts) if parts else None
 
 
 def _mathdial_role(speaker: str) -> str:

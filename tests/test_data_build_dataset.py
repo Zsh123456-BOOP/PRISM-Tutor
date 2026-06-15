@@ -182,3 +182,41 @@ def test_mathdial_official_string_conversation_is_expanded(tmp_path):
     assert mathdial[0]["metadata"]["official_split"] == "train"
     assert mathdial[0]["metadata"]["ground_truth"] == "54"
     assert report["datasets"]["mathdial"]["field_completeness"]["student_utterance"] == 1.0
+
+
+def test_bridge_official_fields_map_to_unified_schema(tmp_path):
+    _write_jsonl(tmp_path / "raw" / "mathdial" / "mathdial.jsonl", [])
+    _write_jsonl(
+        tmp_path / "raw" / "bridge" / "train.json",
+        [
+            {
+                "c_id": "4110653_19",
+                "lesson_topic": "3.6D.Decomposing Figures",
+                "c_h": [
+                    {"id": 21, "text": "What is the area of the pink rectangle?", "user": "tutor"},
+                    {"id": 22, "text": "4 m", "user": "student"},
+                ],
+                "c_r_": [
+                    {"user": "tutor", "text": "Hm, not quite", "is_revised": True},
+                    {"user": "tutor", "text": "Could you tell me what the width is?", "is_revised": True},
+                ],
+                "e": "guess",
+                "z_what": "explain_concept",
+                "z_why": "clarify_misunderstanding",
+            }
+        ],
+    )
+    _write_jsonl(tmp_path / "raw" / "misconception" / "misconception.jsonl", [])
+
+    report = build_datasets(_config(tmp_path), strict=True)
+    bridge = read_jsonl(tmp_path / "processed" / "bridge.jsonl")
+
+    assert len(bridge) == 1
+    assert bridge[0]["conversation_id"] == "4110653_19"
+    assert bridge[0]["student_utterance"] == "4 m"
+    assert bridge[0]["student_error"] == "guess"
+    assert bridge[0]["remediation_strategy"] == "explain_concept"
+    assert bridge[0]["teacher_intention"] == "clarify_misunderstanding"
+    assert "Could you tell me" in bridge[0]["tutor_response"]
+    assert bridge[0]["metadata"]["official_split"] == "train"
+    assert report["datasets"]["bridge"]["field_completeness"]["student_error"] == 1.0

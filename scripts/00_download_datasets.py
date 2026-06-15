@@ -135,6 +135,55 @@ def _check_manual_dataset(name: str, spec: dict[str, Any], *, strict: bool) -> d
     return result
 
 
+def _download_github_files(name: str, spec: dict[str, Any], *, dry_run: bool) -> dict[str, Any]:
+    raw_path = Path(spec["raw_path"])
+    files = list(spec.get("files", []))
+    result: dict[str, Any] = {
+        "dataset": name,
+        "source_type": spec["source_type"],
+        "repo": spec.get("repo"),
+        "ref": spec.get("ref", "main"),
+        "raw_path": str(raw_path),
+        "requested_files": files,
+        "downloaded_files": [],
+        "status": "dry_run" if dry_run else "pending",
+        "errors": [],
+        "warnings": [],
+    }
+    if dry_run:
+        return result
+
+    raw_path.mkdir(parents=True, exist_ok=True)
+    for item in files:
+        try:
+            source_path = item["source_path"] if isinstance(item, dict) else str(item)
+            target_name = item.get("target_name", Path(source_path).name) if isinstance(item, dict) else Path(source_path).name
+            target = raw_path / target_name
+            _download_github_file_direct(
+                repo=str(spec["repo"]),
+                ref=str(spec.get("ref", "main")),
+                source_path=str(source_path),
+                target=target,
+            )
+            result["downloaded_files"].append(str(target))
+        except Exception as exc:
+            result["errors"].append(f"{item}: {exc}")
+    result["status"] = "completed" if not result["errors"] else "failed"
+    return result
+
+
+def _download_github_file_direct(*, repo: str, ref: str, source_path: str, target: Path) -> None:
+    quoted_repo = "/".join(urllib.parse.quote(part) for part in repo.split("/"))
+    quoted_ref = urllib.parse.quote(ref)
+    quoted_source = "/".join(urllib.parse.quote(part) for part in source_path.split("/"))
+    url = f"https://raw.githubusercontent.com/{quoted_repo}/{quoted_ref}/{quoted_source}"
+    request = urllib.request.Request(url, headers={"User-Agent": "prism-tutor-dataset-downloader/0.1"})
+    with urllib.request.urlopen(request, timeout=120) as response:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open("wb") as handle:
+            shutil.copyfileobj(response, handle)
+
+
 def run_download(config_path: str, *, datasets: list[str] | None, dry_run: bool, strict: bool) -> dict[str, Any]:
     config = load_config(config_path)
     selected = set(datasets) if datasets else None
@@ -145,6 +194,8 @@ def run_download(config_path: str, *, datasets: list[str] | None, dry_run: bool,
         source_type = spec.get("source_type")
         if source_type == "huggingface_files":
             results.append(_download_hf_files(name, spec, dry_run=dry_run))
+        elif source_type == "github_files":
+            results.append(_download_github_files(name, spec, dry_run=dry_run))
         elif source_type == "manual_required":
             results.append(_check_manual_dataset(name, spec, strict=strict))
         else:
