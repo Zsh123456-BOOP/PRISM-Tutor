@@ -17,7 +17,7 @@
 - [x] 09 PRISM 模块：risk estimator、QoS router、budget controller、state commit、M1/M2/M3 graph。
 - [x] 10 Runner 与日志：`scripts/02_run_generation.py` 生成 JSONL raw logs 与 schema-versioned manifest，支持 `--live-llm` 真实 vLLM endpoint 调用和 `--num-shards/--shard-index` 样本级分片。
 - [x] 11 自动指标：`scripts/04_compute_metrics.py` 生成 record/aggregate metrics、`routing_metrics.csv`、`state_metrics.csv`、`leakage_rule_hits.jsonl` 和 coverage/alignment report，并已支持 unified schema gold 字段映射。
-- [x] 12 LLM judge：`scripts/03_run_judge.py` 默认 mock；真实 DeepSeek 需显式环境变量，已验证 `thinking_type=disabled` 后可稳定解析。
+- [x] 12 LLM judge：`scripts/03_run_judge.py` 默认 mock；真实 DeepSeek 需显式环境变量，已验证 `thinking_type=disabled` 后可稳定解析；judge runner 会为单候选/多候选保存 deterministic display order、seed、candidate_label，降低 position bias。
 - [x] 13 实验矩阵：`configs/experiments.yaml` 与 `scripts/run_exp*.sh`。
 - [x] 14 统计、表格和图：`scripts/05_make_tables.py`、`scripts/06_make_figures.py`。
 - [x] 15 Human audit：`scripts/07_sample_human_audit.py`、`scripts/08_human_agreement.py`。
@@ -26,7 +26,7 @@
 ## 已验证命令
 
 - [x] 本机 `python -m compileall prism_tutor scripts data serving tests`
-- [x] 本机 `python -m pytest -q`，结果：92 passed。
+- [x] 本机 `python -m pytest -q`，结果：94 passed。
 - [x] 服务器 `python -m pytest -q`，结果：92 passed。
 - [x] `python scripts/00_prepare_env_check.py --config configs/default.yaml --dry-run`
 - [x] 服务器 env check dry-run：`CUDA_VISIBLE_DEVICES=2,3 python scripts/00_prepare_env_check.py --config configs/default.yaml --output /tmp/prism_env_check_latest.json --dry-run`，结果 `status=ok`，检测到 4 张 GPU，CUDA_VISIBLE_DEVICES 与配置一致。

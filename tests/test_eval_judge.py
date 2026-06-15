@@ -1,11 +1,21 @@
 import os
 import json
+import importlib.util
+from pathlib import Path
 
 import pytest
 
 from prism_tutor.eval.judge_client import JudgeClientConfig, make_judge_client
 from prism_tutor.eval.judge_merge import merge_leakage
 from prism_tutor.eval.judge_schema import parse_score_json
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SCRIPT_PATH = ROOT / "scripts" / "03_run_judge.py"
+SPEC = importlib.util.spec_from_file_location("run_judge_script", SCRIPT_PATH)
+run_judge = importlib.util.module_from_spec(SPEC)
+assert SPEC and SPEC.loader
+SPEC.loader.exec_module(run_judge)
 
 
 def test_mock_judge_is_default_and_records_metadata(monkeypatch):
@@ -151,3 +161,57 @@ def test_real_judge_retries_with_repair_instruction(monkeypatch):
     assert len(result["raw_attempts"]) == 2
     assert result["raw_attempts"][0]["error"] is not None
     assert "previous response was invalid" in bodies[1]["messages"][-1]["content"].lower()
+
+
+def test_judge_candidate_rows_have_stable_display_order():
+    row = {
+        "sample_id": "s1",
+        "dataset": "mathdial",
+        "method": "bundle",
+        "candidate_responses": [
+            {"method": "a", "final_response": "A"},
+            {"method": "b", "final_response": "B"},
+            {"method": "c", "final_response": "C"},
+        ],
+    }
+
+    first = run_judge._candidate_rows(row, seed=42)
+    second = run_judge._candidate_rows(row, seed=42)
+    third = run_judge._candidate_rows(row, seed=43)
+
+    assert [item["candidate_label"] for item in first] == [item["candidate_label"] for item in second]
+    assert first[0]["display_order"] == second[0]["display_order"]
+    assert first[0]["display_order_seed"] == second[0]["display_order_seed"]
+    assert first[0]["display_order_seed"] != third[0]["display_order_seed"]
+    assert sorted(first[0]["display_order"]) == ["a", "b", "c"]
+
+
+def test_run_judge_writes_display_order_fields(tmp_path):
+    input_path = tmp_path / "generations.jsonl"
+    output_dir = tmp_path / "judge"
+    input_path.write_text(
+        json.dumps(
+            {
+                "sample_id": "s1",
+                "dataset": "mathdial",
+                "method": "bundle",
+                "candidate_responses": [
+                    {"method": "a", "final_response": "The answer is 2."},
+                    {"method": "b", "final_response": "Try again."},
+                ],
+                "state": {"sample": {"question": "1+1", "metadata": {"correct_answer": "2"}}},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    rc = run_judge.main(["--input", str(input_path), "--output_dir", str(output_dir), "--seed", "7"])
+
+    rows = [json.loads(line) for line in (output_dir / "judge_scores.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert rc == 0
+    assert len(rows) == 2
+    assert rows[0]["display_order"] == rows[1]["display_order"]
+    assert rows[0]["display_order_seed"] == rows[1]["display_order_seed"]
+    assert {row["candidate_label"] for row in rows} == {"a", "b"}
+    assert all(row["raw_response"] for row in rows)
