@@ -25,6 +25,9 @@ DEFAULT_METRICS = [
     "misconception_f1",
     "routing_f1",
     "state_conflict_rate",
+    "final_leakage",
+    "judge_leakage",
+    "leakage_conflict",
     "rule_leakage",
 ]
 
@@ -107,7 +110,11 @@ def _coerce_numeric(rows: list[dict]) -> list[dict]:
 def _filter_rows(rows: list[dict], methods: set[str] | None) -> list[dict]:
     if methods is None:
         return rows
-    return [row for row in rows if str(row.get("method")) in methods]
+    return [row for row in rows if _method_matches(str(row.get("method")), methods)]
+
+
+def _method_matches(method: str, methods: set[str]) -> bool:
+    return method in methods or any(method.startswith(f"{allowed}__") for allowed in methods)
 
 
 def _write_table(out: Path, stem: str, caption: str, rows: list[dict], metrics: list[str]) -> dict[str, int | str]:
@@ -143,7 +150,7 @@ def main(argv: list[str] | None = None) -> int:
             ("ours_full", "debate"),
             ("ours_routing_budget", "difficulty_routing"),
         ]:
-            comparisons.append(compare_methods(rows, metric, a, b, binary=metric == "rule_leakage"))
+            comparisons.append(compare_methods(rows, metric, a, b, binary=metric.endswith("leakage") or metric == "leakage_conflict"))
     write_json(record_path.parent / "significance_tests.json", holm_correction(comparisons))
     print(json.dumps({"rows": len(rows), "tables": table_outputs, "output_dir": str(out)}, indent=2))
     return 0
