@@ -104,6 +104,16 @@ def validate_blind_rows(rows: list[dict[str, Any]]) -> None:
             raise ValueError(f"blind row {idx} has invalid display_order")
 
 
+def blind_row_content_issues(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    issues: list[dict[str, Any]] = []
+    required = ["problem", "candidate_response"]
+    for idx, row in enumerate(rows, 1):
+        missing = [field for field in required if row.get(field) in (None, "")]
+        if missing:
+            issues.append({"row_index": idx, "audit_id": row.get("audit_id"), "sample_id": row.get("sample_id"), "missing": missing})
+    return issues
+
+
 def _mixed_random_and_hard(pool: list[dict[str, Any]], n: int, rng: random.Random) -> list[dict[str, Any]]:
     if n <= 0 or not pool:
         return []

@@ -1,7 +1,7 @@
 import pytest
 
 from prism_tutor.eval.human_agreement import build_agreement_report, cohen_kappa, spearman_correlation
-from prism_tutor.eval.human_audit_sampler import sample_human_audit, validate_blind_rows
+from prism_tutor.eval.human_audit_sampler import blind_row_content_issues, sample_human_audit, validate_blind_rows
 
 
 def test_human_audit_sampler_blinds_forbidden_fields():
@@ -113,6 +113,16 @@ def test_validate_blind_rows_rejects_method_leak():
 def test_validate_blind_rows_rejects_invalid_display_order():
     with pytest.raises(ValueError):
         validate_blind_rows([{"sample_id": "s1", "display_order": 2}])
+
+
+def test_blind_row_content_issues_report_missing_annotation_context():
+    issues = blind_row_content_issues(
+        [
+            {"audit_id": "A0001", "sample_id": "s1", "display_order": 1, "problem": "", "candidate_response": None}
+        ]
+    )
+
+    assert issues == [{"row_index": 1, "audit_id": "A0001", "sample_id": "s1", "missing": ["problem", "candidate_response"]}]
 
 
 def test_human_agreement_report():

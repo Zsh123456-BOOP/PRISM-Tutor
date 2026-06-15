@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from prism_tutor.eval.human_audit_sampler import sample_human_audit
+from prism_tutor.eval.human_audit_sampler import blind_row_content_issues, sample_human_audit
 from prism_tutor.eval.io import read_jsonl, write_csv, write_json
 
 
@@ -35,6 +35,28 @@ def _artifact_exists(path: str | Path) -> bool:
     if p.is_dir():
         return any(p.iterdir())
     return p.exists()
+
+
+def _formal_prerequisites(records: str, generations: str, judge_scores: str, tables: str) -> dict[str, bool]:
+    tables_path = Path(tables)
+    table_stems = [
+        "table1_main_results",
+        "table2_routing",
+        "table3_budget",
+        "table4_state_commit",
+        "table5_ablation",
+        "table6_robustness",
+    ]
+    checks = {
+        "record_auto_metrics": _artifact_exists(records),
+        "generation_logs": bool(_jsonl_files(generations)),
+        "judge_scores": _artifact_exists(judge_scores),
+        "table_manifest": _artifact_exists(tables_path / "table_manifest.json"),
+    }
+    for stem in table_stems:
+        checks[f"{stem}.csv"] = _artifact_exists(tables_path / f"{stem}.csv")
+        checks[f"{stem}.tex"] = _artifact_exists(tables_path / f"{stem}.tex")
+    return checks
 
 
 def _sample_from_generation(row: dict) -> dict:
@@ -84,12 +106,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--allow-incomplete", action="store_true")
     args = parser.parse_args(argv)
 
-    prerequisites = {
-        "record_auto_metrics": _artifact_exists(args.records),
-        "generation_logs": bool(_jsonl_files(args.generations)),
-        "judge_scores": _artifact_exists(args.judge_scores),
-        "tables": _artifact_exists(args.tables),
-    }
+    prerequisites = _formal_prerequisites(args.records, args.generations, args.judge_scores, args.tables)
     if not args.allow_incomplete:
         missing = [name for name, exists in prerequisites.items() if not exists]
         if missing:
@@ -106,6 +123,15 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("No audit rows found; run experiments and metrics first or pass --allow-incomplete for smoke.")
     result = sample_human_audit(audit_rows, target_n=args.n, seed=args.seed)
     result["manifest"]["prerequisites"] = prerequisites
+    content_issues = blind_row_content_issues(result["blind_rows"])
+    result["manifest"]["content_issues"] = content_issues
+    if content_issues and not args.allow_incomplete:
+        raise SystemExit(
+            "Human audit blind rows are missing required annotation context: "
+            + json.dumps(content_issues[:10], ensure_ascii=False)
+        )
+    if result["manifest"].get("actual_n") and not result["manifest"].get("pairwise_preference_rows") and not args.allow_incomplete:
+        raise SystemExit("Human audit formal sampling requires at least one pairwise A/B preference row.")
     out = Path(args.output_dir)
     out.mkdir(parents=True, exist_ok=True)
     write_csv(out / "human_audit_blind.csv", result["blind_rows"], list(result["blind_rows"][0]) if result["blind_rows"] else ["audit_id"])
