@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-本仓库已经具备 Task Card 01-16 的可运行代码骨架、mock/dry-run 端到端链路，以及服务器上的 Qwen3-8B vLLM live smoke 链路。MathDial、Bridge 与 MaE Math Misconceptions 三个真实数据集均已下载、传输到服务器并完成 schema build。Exp0-Exp6 已完成真实 Qwen live smoke（limit=1）与 downstream metrics/tables/figures/artifact smoke；真实 DeepSeek judge 已对 live smoke 123 条 generation 完成评分。runner 已支持 sample-level sharding，用于拆分全量正式实验，并已支持 `maintain --target-running N` 与 `supervise` 可恢复补齐后台并发。全量完成后可用 `scripts/12_finalize_full_run.py` gated finalization 生成 metrics/tables/figures/human audit sample/paper artifacts；`scripts/11_plan_or_run_shards.py progress` 可从 supervisor log 输出完成率、近期吞吐、ETA 与 health summary。当前全量 Exp0-Exp6 正式实验已经开始运行并由服务器 supervisor 接管，但尚未完成；也尚未执行正式人工标注版 200 条 blind human audit。
+本仓库已经具备 Task Card 01-16 的可运行代码骨架、mock/dry-run 端到端链路，以及服务器上的 Qwen3-8B vLLM live smoke 链路。MathDial、Bridge 与 MaE Math Misconceptions 三个真实数据集均已下载、传输到服务器并完成 schema build。Exp0-Exp6 已完成真实 Qwen live smoke（limit=1）与 downstream metrics/tables/figures/artifact smoke；真实 DeepSeek judge 已对 live smoke 123 条 generation 完成评分。runner 已支持 sample-level sharding，用于拆分全量正式实验，并已支持 `maintain --target-running N` 与 `supervise` 可恢复补齐后台并发。全量完成后可用 `scripts/12_finalize_full_run.py` gated finalization 生成 metrics/tables/figures/human audit sample/paper artifacts；`scripts/11_plan_or_run_shards.py progress` 可从 supervisor log 输出完成率、近期吞吐、ETA 与 health summary，并可识别 running 超过 supervisor target 的情况。当前全量 Exp0-Exp6 正式实验已经开始运行并由服务器 supervisor 接管，但尚未完成；也尚未执行正式人工标注版 200 条 blind human audit。
 
 ## 已完成的代码路径
 
@@ -27,7 +27,7 @@
 
 - [x] 本机 `python -m compileall prism_tutor scripts data serving tests`
 - [x] 本机 `python -m pytest -q`，结果：48 passed。
-- [x] 服务器 `python -m pytest -q`，结果：62 passed。
+- [x] 服务器 `python -m pytest -q`，结果：63 passed。
 - [x] `python scripts/00_prepare_env_check.py --config configs/default.yaml --dry-run`
 - [x] `python scripts/01_build_datasets.py --help`
 - [x] `bash serving/start_vllm_gpu0.sh`
@@ -55,8 +55,8 @@
 - [x] Shard concurrency maintainer：`python scripts/11_plan_or_run_shards.py maintain --plan outputs/full_run/shard_plan.json --target-running 2 --max-launches 2`，当前 running 已达目标时不会重复启动 job。
 - [x] Shard supervisor：`python scripts/11_plan_or_run_shards.py supervise --plan outputs/full_run/shard_plan.json --target-running 18 --interval-seconds 120 --log-path outputs/full_run/logs/shards/supervisor_compact.jsonl`，服务器 PID `2472200`。
 - [x] Full-run finalization gate：`scripts/12_finalize_full_run.py --allow-incomplete --dry-run` 已在服务器真实 shard plan 上验证，默认不调用 judge，计划步骤为 auto metrics、tables、figures、human audit sample、paper artifacts。
-- [x] Shard progress report：`python scripts/11_plan_or_run_shards.py progress --plan outputs/full_run/shard_plan.json --supervisor-log outputs/full_run/logs/shards/supervisor_compact.jsonl --rate-window 5` 已在服务器验证，health summary 当前为 `ok`。
-- [x] 正式 full_run 后台运行：已完成 22 个 shard，18 个 shard 正在 running；最近检查 generation_rows `2866`、error_rows `0`，近期吞吐约 `82.82` rows/min，粗略 ETA 约 `40.56` hours，GPU2/GPU3 均 100% utilization，health summary 为 `ok`。
+- [x] Shard progress report：`python scripts/11_plan_or_run_shards.py progress --plan outputs/full_run/shard_plan.json --supervisor-log outputs/full_run/logs/shards/supervisor_compact.jsonl --rate-window 5` 已在服务器验证，health summary 当前为 `ok`，并记录 `target_running`。
+- [x] 正式 full_run 后台运行：已完成 27 个 shard，18 个 shard 正在 running；最近检查 generation_rows `3178`、error_rows `0`，近期吞吐约 `86.04` rows/min，粗略 ETA 约 `38.97` hours，GPU2/GPU3 均 100% utilization，health summary 为 `ok`。
 
 ## 仍需服务器真实执行的项目
 
@@ -68,7 +68,7 @@
 - [x] 用 live smoke raw logs 重新生成 smoke 版 tables、figures、paper artifacts。
 - [x] 提供全量正式实验前的分片执行能力与规模估算 gate。
 - [x] 提供全量正式实验的 shard manifest、status、launch 和 maintain 工具：`scripts/11_plan_or_run_shards.py`。
-- [ ] 使用真实 Qwen3-8B endpoint 跑完全量 Exp0-Exp6 generation。目前已完成 Exp0 前 22 个 shard，并由 supervisor 维持 18 个 shard 并发继续运行；尚未完成全量 1792 个 job。
+- [ ] 使用真实 Qwen3-8B endpoint 跑完全量 Exp0-Exp6 generation。目前已完成 Exp0 前 27 个 shard，并由 supervisor 维持 18 个 shard 并发继续运行；尚未完成全量 1792 个 job。
 - [ ] 全量实验完成后执行正式 200 条 blind human audit，并填入人工标签后计算 agreement。
 - [ ] 用全量真实 raw logs 重新生成正式论文 tables、figures、paper artifacts。
 
