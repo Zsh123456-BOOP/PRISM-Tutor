@@ -74,6 +74,10 @@ def test_finalize_dry_run_writes_planned_manifest(tmp_path: Path) -> None:
     assert rc == 0
     assert payload["status"] == "planned"
     assert payload["shard_status"]["by_status"] == {"completed": 1, "pending": 1}
+    assert payload["completed_jobs"] == 1
+    assert payload["total_jobs"] == 2
+    assert payload["can_finalize"] is False
+    assert payload["incomplete_jobs"] == {"pending": 1}
     assert [step["name"] for step in payload["steps"]] == [
         "auto_metrics",
         "tables",
@@ -96,3 +100,19 @@ def test_finalize_only_adds_judge_when_requested(tmp_path: Path) -> None:
     commands = finalize.build_commands(args)
 
     assert [command["name"] for command in commands][:2] == ["auto_metrics", "llm_judge"]
+
+
+def test_finalize_paper_artifacts_uses_full_run_prefix(tmp_path: Path) -> None:
+    args = finalize.argparse.Namespace(
+        output_dir=str(tmp_path / "out"),
+        gold="data/splits",
+        run_judge=False,
+        judge_config="configs/judge.yaml",
+        audit_n=200,
+    )
+
+    commands = finalize.build_commands(args)
+    paper_command = next(command for command in commands if command["name"] == "paper_artifacts")
+
+    assert "--artifact-prefix" in paper_command["argv"]
+    assert paper_command["argv"][paper_command["argv"].index("--artifact-prefix") + 1] == str(tmp_path / "out")

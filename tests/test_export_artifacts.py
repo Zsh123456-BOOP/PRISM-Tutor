@@ -35,3 +35,20 @@ def test_export_paper_artifacts_writes_index_summary_and_manifest(tmp_path):
     assert "exp0" in manifest["experiments"]
     assert "exp1" in manifest["missing_experiments"]
     assert "`outputs/metrics/significance_tests.json`" in files["artifact_index"].read_text(encoding="utf-8")
+
+
+def test_export_paper_artifacts_uses_run_local_artifact_prefix(tmp_path):
+    (tmp_path / "outputs" / "full_run" / "metrics").mkdir(parents=True)
+    out = tmp_path / "paper_artifacts"
+
+    files = export_paper_artifacts(
+        tmp_path,
+        out,
+        required_paths=["outputs/full_run/metrics"],
+        artifact_prefix="outputs/full_run",
+    )
+
+    checklist = files["reproducibility_checklist"].read_text(encoding="utf-8")
+    artifact_index = files["artifact_index"].read_text(encoding="utf-8")
+    assert "outputs/full_run/metrics: passed" in checklist
+    assert "`outputs/full_run/metrics/significance_tests.json`" in artifact_index

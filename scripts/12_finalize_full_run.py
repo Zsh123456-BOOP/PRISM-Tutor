@@ -46,6 +46,18 @@ def _require_complete(summary: dict[str, Any], allow_incomplete: bool) -> None:
         )
 
 
+def _completion_summary(summary: dict[str, Any]) -> dict[str, Any]:
+    completed = int(summary["by_status"].get("completed", 0))
+    total = int(summary["job_count"])
+    incomplete = {key: value for key, value in summary["by_status"].items() if key != "completed" and value}
+    return {
+        "completed_jobs": completed,
+        "total_jobs": total,
+        "can_finalize": completed == total and not incomplete,
+        "incomplete_jobs": incomplete,
+    }
+
+
 def _cmd(*parts: str) -> list[str]:
     return [sys.executable, *parts]
 
@@ -87,7 +99,17 @@ def build_commands(args: argparse.Namespace) -> list[dict[str, Any]]:
             },
             {
                 "name": "paper_artifacts",
-                "argv": _cmd("scripts/09_export_paper_artifacts.py", "--root", ".", "--output_dir", paper_artifacts, "--logs", logs),
+                "argv": _cmd(
+                    "scripts/09_export_paper_artifacts.py",
+                    "--root",
+                    ".",
+                    "--output_dir",
+                    paper_artifacts,
+                    "--logs",
+                    logs,
+                    "--artifact-prefix",
+                    args.output_dir,
+                ),
             },
         ]
     )
@@ -124,6 +146,7 @@ def main(argv: list[str] | None = None) -> int:
 
     summary = _status_summary(args.plan)
     _require_complete(summary, args.allow_incomplete)
+    completion = _completion_summary(summary)
     commands = build_commands(args)
     steps = [_run_command(step, args.dry_run) for step in commands]
     status = "planned" if args.dry_run else ("completed" if all(step["status"] == "completed" for step in steps) else "failed")
@@ -133,12 +156,28 @@ def main(argv: list[str] | None = None) -> int:
         "allow_incomplete": args.allow_incomplete,
         "run_judge": args.run_judge,
         "shard_status": summary,
+        **completion,
         "steps": steps,
     }
     output = Path(args.manifest)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
-    print(json.dumps({"status": status, "manifest": str(output), "shard_status": summary}, ensure_ascii=False, indent=2))
+    print(
+        json.dumps(
+            {
+                "status": status,
+                "manifest": str(output),
+                "shard_status": summary,
+                **completion,
+                "planned_steps": [step["name"] for step in steps],
+                "run_judge": args.run_judge,
+                "allow_incomplete": args.allow_incomplete,
+                "dry_run": args.dry_run,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
     return 0 if status in {"planned", "completed"} else 1
 
 

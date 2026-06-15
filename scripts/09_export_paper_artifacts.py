@@ -30,9 +30,19 @@ def main() -> int:
     parser.add_argument("--root", default=".")
     parser.add_argument("--output_dir", default="outputs/paper_artifacts")
     parser.add_argument("--logs", default="outputs/logs")
+    parser.add_argument(
+        "--artifact-prefix",
+        default="outputs",
+        help="Repository-relative output prefix to check in the reproducibility checklist and artifact index.",
+    )
     args = parser.parse_args()
 
-    files = export_paper_artifacts(args.root, args.output_dir, _load_manifests(Path(args.logs)))
+    files = export_paper_artifacts(
+        args.root,
+        args.output_dir,
+        _load_manifests(Path(args.logs)),
+        artifact_prefix=args.artifact_prefix,
+    )
     print(json.dumps({key: str(value) for key, value in files.items()}, indent=2))
     return 0
 

@@ -9,15 +9,20 @@ from typing import Any
 from .reproducibility_checklist import build_reproducibility_checklist, checklist_to_markdown
 
 
-DEFAULT_REQUIRED_PATHS = [
-    "outputs/logs",
-    "outputs/generations",
-    "outputs/judge_scores/judge_metadata.json",
-    "outputs/metrics",
-    "outputs/tables",
-    "outputs/figures",
-    "outputs/human_audit/human_agreement_report.json",
-]
+DEFAULT_ARTIFACT_PREFIX = "outputs"
+
+
+def default_required_paths(artifact_prefix: str = DEFAULT_ARTIFACT_PREFIX) -> list[str]:
+    prefix = artifact_prefix.rstrip("/")
+    return [
+        f"{prefix}/logs",
+        f"{prefix}/generations",
+        f"{prefix}/judge_scores/judge_metadata.json",
+        f"{prefix}/metrics",
+        f"{prefix}/tables",
+        f"{prefix}/figures",
+        f"{prefix}/human_audit/human_agreement_report.json",
+    ]
 
 
 def export_paper_artifacts(
@@ -25,14 +30,15 @@ def export_paper_artifacts(
     output_dir: str | Path,
     experiment_manifests: list[dict[str, Any]] | None = None,
     required_paths: list[str] | None = None,
+    artifact_prefix: str = DEFAULT_ARTIFACT_PREFIX,
 ) -> dict[str, Path]:
     root_path = Path(root)
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
-    required_paths = required_paths or DEFAULT_REQUIRED_PATHS
+    required_paths = required_paths or default_required_paths(artifact_prefix)
     manifest = build_experiment_manifest(experiment_manifests or [], root_path)
     checklist = build_reproducibility_checklist(root_path, required_paths, metadata={"inference_time_runtime": True})
-    index = build_artifact_index(root_path)
+    index = build_artifact_index(root_path, artifact_prefix=artifact_prefix)
     summary = build_experiment_summary(manifest, checklist, index)
 
     files = {
@@ -59,12 +65,13 @@ def build_experiment_manifest(manifests: list[dict[str, Any]], root: Path) -> di
     }
 
 
-def build_artifact_index(root: Path) -> str:
+def build_artifact_index(root: Path, artifact_prefix: str = DEFAULT_ARTIFACT_PREFIX) -> str:
+    prefix = artifact_prefix.rstrip("/")
     entries = [
-        ("outputs/tables", "scripts/05_make_tables.py", "outputs/metrics/*.csv and judge scores"),
-        ("outputs/figures", "scripts/06_make_figures.py", "outputs/metrics/*.csv and experiment manifest"),
-        ("outputs/metrics/significance_tests.json", "prism_tutor.eval.significance", "paired metric rows"),
-        ("outputs/human_audit", "scripts/07_sample_human_audit.py and scripts/08_human_agreement.py", "judge, metrics, tables"),
+        (f"{prefix}/tables", "scripts/05_make_tables.py", f"{prefix}/metrics/*.csv and judge scores"),
+        (f"{prefix}/figures", "scripts/06_make_figures.py", f"{prefix}/metrics/*.csv and experiment manifest"),
+        (f"{prefix}/metrics/significance_tests.json", "prism_tutor.eval.significance", "paired metric rows"),
+        (f"{prefix}/human_audit", "scripts/07_sample_human_audit.py and scripts/08_human_agreement.py", "judge, metrics, tables"),
     ]
     lines = ["# Artifact Index", ""]
     for rel, source_script, inputs in entries:
