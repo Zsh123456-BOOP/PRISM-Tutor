@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shlex
 import subprocess
 import sys
@@ -145,11 +146,35 @@ def _count_jsonl(path: str | Path) -> int:
         return sum(1 for line in handle if line.strip())
 
 
+def _read_pid(path: str | Path) -> int | None:
+    p = Path(path)
+    if not p.exists():
+        return None
+    try:
+        return int(p.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return None
+
+
+def _pid_is_running(pid: int | None) -> bool:
+    if pid is None:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
 def job_status(job: dict[str, Any]) -> dict[str, Any]:
     manifest_path = Path(job["paths"]["manifest"])
     generation_rows = _count_jsonl(job["paths"]["generations"])
     error_rows = _count_jsonl(job["paths"]["errors"])
     manifest: dict[str, Any] | None = None
+    pid = _read_pid(job["paths"].get("pid", ""))
+    pid_running = _pid_is_running(pid)
     status = "pending"
     counts: dict[str, Any] = {}
     if manifest_path.exists():
@@ -159,8 +184,12 @@ def job_status(job: dict[str, Any]) -> dict[str, Any]:
             counts = manifest.get("run", {}).get("counts", {})
         except json.JSONDecodeError:
             status = "manifest_invalid"
+    elif pid_running:
+        status = "running"
     elif generation_rows:
         status = "partial"
+    if pid is not None and not pid_running and status in {"running", "partial"}:
+        status = "stale_partial" if generation_rows else "stale"
     return {
         "job_id": job["job_id"],
         "experiment": job["experiment"],
@@ -170,6 +199,8 @@ def job_status(job: dict[str, Any]) -> dict[str, Any]:
         "generation_rows": generation_rows,
         "error_rows": error_rows,
         "estimated_records": job.get("estimated_records"),
+        "pid": pid,
+        "pid_running": pid_running,
         "counts": counts,
     }
 
@@ -189,7 +220,8 @@ def status_report(plan: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _select_job(plan: dict[str, Any], job_id: str | None, launch_next: bool) -> dict[str, Any]:
+def _select_job(plan: dict[str, Any], job_id: str | None, launch_next: bool, selected_ids: set[str] | None = None) -> dict[str, Any]:
+    selected_ids = selected_ids or set()
     if job_id:
         for job in plan["jobs"]:
             if job["job_id"] == job_id:
@@ -197,15 +229,17 @@ def _select_job(plan: dict[str, Any], job_id: str | None, launch_next: bool) -> 
         raise KeyError(f"Unknown job_id: {job_id}")
     if launch_next:
         for job in plan["jobs"]:
+            if job["job_id"] in selected_ids:
+                continue
             status = job_status(job)["status"]
-            if status not in {"completed"}:
+            if status not in {"completed", "running"}:
                 return job
         raise RuntimeError("No incomplete jobs remain")
     raise ValueError("Provide --job-id or --next")
 
 
-def launch_job(plan: dict[str, Any], *, job_id: str | None, launch_next: bool, background: bool) -> dict[str, Any]:
-    job = _select_job(plan, job_id, launch_next)
+def launch_job(plan: dict[str, Any], *, job_id: str | None, launch_next: bool, background: bool, selected_ids: set[str] | None = None) -> dict[str, Any]:
+    job = _select_job(plan, job_id, launch_next, selected_ids=selected_ids)
     argv = list(job["argv"])
     stdout_path = Path(job["paths"]["stdout"])
     pid_path = Path(job["paths"]["pid"])
@@ -217,6 +251,28 @@ def launch_job(plan: dict[str, Any], *, job_id: str | None, launch_next: bool, b
         return {"job_id": job["job_id"], "pid": process.pid, "stdout": str(stdout_path), "background": True}
     completed = subprocess.run(argv, check=False)
     return {"job_id": job["job_id"], "returncode": completed.returncode, "background": False}
+
+
+def launch_jobs(plan: dict[str, Any], *, job_id: str | None, launch_next: bool, background: bool, count: int) -> dict[str, Any]:
+    if count < 1:
+        raise ValueError("count must be >= 1")
+    if job_id and count != 1:
+        raise ValueError("--job-id can only be used with --count 1")
+    if not background and count != 1:
+        raise ValueError("foreground launch supports only --count 1")
+    launched = []
+    selected_ids: set[str] = set()
+    for _ in range(count):
+        result = launch_job(
+            plan,
+            job_id=job_id,
+            launch_next=launch_next,
+            background=background,
+            selected_ids=selected_ids,
+        )
+        selected_ids.add(result["job_id"])
+        launched.append(result)
+    return {"launched": launched, "count": len(launched), "background": background}
 
 
 def _split_csv(value: str | None) -> list[str] | None:
@@ -249,6 +305,7 @@ def main(argv: list[str] | None = None) -> int:
     launch_parser.add_argument("--job-id")
     launch_parser.add_argument("--next", action="store_true")
     launch_parser.add_argument("--background", action="store_true")
+    launch_parser.add_argument("--count", type=int, default=1)
 
     args = parser.parse_args(argv)
     if args.command == "plan":
@@ -270,9 +327,15 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0
     if args.command == "launch":
-        result = launch_job(load_plan(args.plan), job_id=args.job_id, launch_next=args.next, background=args.background)
+        result = launch_jobs(
+            load_plan(args.plan),
+            job_id=args.job_id,
+            launch_next=args.next,
+            background=args.background,
+            count=args.count,
+        )
         print(json.dumps(result, ensure_ascii=False, indent=2))
-        return int(result.get("returncode", 0))
+        return max(int(item.get("returncode", 0)) for item in result["launched"])
     return 2
 
 

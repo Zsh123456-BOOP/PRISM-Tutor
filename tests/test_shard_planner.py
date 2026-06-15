@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 from pathlib import Path
 
 
@@ -94,3 +95,49 @@ def test_status_report_reads_manifest_and_partial_rows(tmp_path: Path) -> None:
 
     assert report["by_status"] == {"completed": 1, "partial": 1}
     assert report["generation_rows"] == 2
+
+
+def test_status_report_marks_running_pid(tmp_path: Path) -> None:
+    _write_jsonl(tmp_path / "running.jsonl", [{"sample_id": "a"}])
+    (tmp_path / "running.pid").write_text(str(os.getpid()), encoding="utf-8")
+    plan = {
+        "jobs": [
+            {
+                "job_id": "running",
+                "experiment": "exp0",
+                "shard_index": 0,
+                "num_shards": 1,
+                "estimated_records": 2,
+                "paths": {
+                    "generations": str(tmp_path / "running.jsonl"),
+                    "errors": str(tmp_path / "running_errors.jsonl"),
+                    "manifest": str(tmp_path / "running_manifest.json"),
+                    "pid": str(tmp_path / "running.pid"),
+                },
+            }
+        ]
+    }
+
+    report = shard_planner.status_report(plan)
+
+    assert report["by_status"] == {"running": 1}
+    assert report["jobs"][0]["pid_running"] is True
+
+
+def test_launch_jobs_selects_distinct_next_jobs(monkeypatch) -> None:
+    launched = []
+    plan = {"jobs": [{"job_id": "a", "argv": ["echo", "a"], "paths": {}}, {"job_id": "b", "argv": ["echo", "b"], "paths": {}}]}
+
+    monkeypatch.setattr(shard_planner, "job_status", lambda job: {"status": "pending"})
+
+    def fake_launch_job(plan, *, job_id, launch_next, background, selected_ids):
+        job = shard_planner._select_job(plan, job_id, launch_next, selected_ids=selected_ids)
+        launched.append(job["job_id"])
+        return {"job_id": job["job_id"], "pid": len(launched), "background": background}
+
+    monkeypatch.setattr(shard_planner, "launch_job", fake_launch_job)
+
+    result = shard_planner.launch_jobs(plan, job_id=None, launch_next=True, background=True, count=2)
+
+    assert launched == ["a", "b"]
+    assert result["count"] == 2
