@@ -52,6 +52,7 @@ def main() -> int:
             temperature=float(cfg.get("temperature", 0.0)),
             top_p=float(cfg.get("top_p", 1.0)),
             max_tokens=int(cfg.get("max_tokens", 768)),
+            response_format_json=bool(cfg.get("response_format_json", False)),
         )
     )
 

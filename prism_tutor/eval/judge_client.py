@@ -29,6 +29,7 @@ class JudgeClientConfig:
     max_tokens: int = 768
     timeout_s: float = 30.0
     retries: int = 1
+    response_format_json: bool = False
 
 
 class MockJudgeClient:
@@ -93,8 +94,9 @@ class DeepSeekJudgeClient(MockJudgeClient):
             "temperature": self.config.temperature,
             "top_p": self.config.top_p,
             "max_tokens": self.config.max_tokens,
-            "response_format": {"type": "json_object"},
         }
+        if self.config.response_format_json:
+            body["response_format"] = {"type": "json_object"}
         raw_response = ""
         error = None
         parsed_score = None

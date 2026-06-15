@@ -92,7 +92,7 @@ def test_real_judge_request_uses_json_response_format(monkeypatch):
         return FakeResponse()
 
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
-    client = make_judge_client(JudgeClientConfig(provider="deepseek", retries=0))
+    client = make_judge_client(JudgeClientConfig(provider="deepseek", retries=0, response_format_json=True))
     result = client.judge({"sample_id": "s1", "candidate_response": "Try again."})
 
     assert captured["body"]["response_format"] == {"type": "json_object"}
