@@ -76,6 +76,13 @@ TABLE_SPECS = [
     },
 ]
 
+PRIMARY_COMPARISONS = [
+    ("ours_full", "fixed_4"),
+    ("ours_full", "generic_sparse"),
+    ("ours_full", "debate"),
+    ("ours_routing_budget", "difficulty_routing"),
+]
+
 
 def _read_csv(path: Path) -> list[dict]:
     with path.open("r", encoding="utf-8", newline="") as handle:
@@ -125,10 +132,27 @@ def _write_table(out: Path, stem: str, caption: str, rows: list[dict], metrics: 
     return {"stem": stem, "input_rows": len(rows), "table_rows": len(table)}
 
 
+def _formal_failures(table_outputs: list[dict], comparisons: list[dict]) -> list[dict]:
+    failures: list[dict] = []
+    for table in table_outputs:
+        if int(table.get("table_rows") or 0) == 0:
+            failures.append({"type": "empty_table", "stem": table.get("stem")})
+    for method_a, method_b in PRIMARY_COMPARISONS:
+        matched = [
+            row
+            for row in comparisons
+            if row.get("method_a") == method_a and row.get("method_b") == method_b
+        ]
+        if matched and max(int(row.get("n") or 0) for row in matched) == 0:
+            failures.append({"type": "missing_paired_comparison", "method_a": method_a, "method_b": method_b})
+    return failures
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Build paper tables and significance summaries.")
     parser.add_argument("--record_metrics", default="outputs/metrics/record_auto_metrics.jsonl")
     parser.add_argument("--output_dir", default="outputs/tables")
+    parser.add_argument("--allow-incomplete-tables", action="store_true", help="Allow empty task tables or missing paired comparisons for smoke runs.")
     args = parser.parse_args(argv)
 
     record_path = Path(args.record_metrics)
@@ -144,15 +168,24 @@ def main(argv: list[str] | None = None) -> int:
 
     comparisons = []
     for metric in metrics:
-        for a, b in [
-            ("ours_full", "fixed_4"),
-            ("ours_full", "generic_sparse"),
-            ("ours_full", "debate"),
-            ("ours_routing_budget", "difficulty_routing"),
-        ]:
+        for a, b in PRIMARY_COMPARISONS:
             comparisons.append(compare_methods(rows, metric, a, b, binary=metric.endswith("leakage") or metric == "leakage_conflict"))
-    write_json(record_path.parent / "significance_tests.json", holm_correction(comparisons))
-    print(json.dumps({"rows": len(rows), "tables": table_outputs, "output_dir": str(out)}, indent=2))
+    corrected = holm_correction(comparisons)
+    write_json(record_path.parent / "significance_tests.json", corrected)
+    failures = _formal_failures(table_outputs, corrected)
+    table_manifest = {
+        "status": "failed" if failures else "passed",
+        "rows": len(rows),
+        "metrics": metrics,
+        "tables": table_outputs,
+        "formal_failures": failures,
+        "significance_tests": str(record_path.parent / "significance_tests.json"),
+        "output_dir": str(out),
+    }
+    write_json(out / "table_manifest.json", table_manifest)
+    print(json.dumps(table_manifest, indent=2))
+    if failures and not args.allow_incomplete_tables:
+        return 2
     return 0
 
 

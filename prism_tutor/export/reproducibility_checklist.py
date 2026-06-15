@@ -238,6 +238,16 @@ def _content_checks(root: Path, rel_paths: list[str]) -> list[dict[str, Any]]:
                     "actual_status": payload.get("status"),
                 }
             )
+        elif rel.endswith("table_manifest.json"):
+            payload = _load_optional_json(path) or {}
+            checks.append(
+                {
+                    "name": f"{rel}:content",
+                    "status": "passed" if payload.get("status") == "passed" else "failed",
+                    "expected_status": "passed",
+                    "actual_status": payload.get("status"),
+                }
+            )
         elif rel.endswith("human_agreement_report.json"):
             payload = _load_optional_json(path) or {}
             checks.append(

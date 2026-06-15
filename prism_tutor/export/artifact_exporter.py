@@ -41,6 +41,7 @@ def default_required_paths(artifact_prefix: str = DEFAULT_ARTIFACT_PREFIX) -> li
         f"{prefix}/metrics/record_auto_metrics.jsonl",
         f"{prefix}/metrics/significance_tests.json",
         f"{prefix}/tables",
+        f"{prefix}/tables/table_manifest.json",
         *[f"{prefix}/tables/{stem}.{ext}" for stem in table_stems for ext in ("csv", "tex")],
         f"{prefix}/figures",
         *[f"{prefix}/figures/{name}" for name in figure_files],

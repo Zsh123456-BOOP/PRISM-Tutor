@@ -133,7 +133,8 @@ def build_commands(args: argparse.Namespace) -> list[dict[str, Any]]:
         [
             {
                 "name": "tables",
-                "argv": _cmd("scripts/05_make_tables.py", "--record_metrics", str(Path(metrics) / "record_auto_metrics.jsonl"), "--output_dir", tables),
+                "argv": _cmd("scripts/05_make_tables.py", "--record_metrics", str(Path(metrics) / "record_auto_metrics.jsonl"), "--output_dir", tables)
+                + (["--allow-incomplete-tables"] if getattr(args, "allow_incomplete", False) else []),
             },
             {
                 "name": "figures",

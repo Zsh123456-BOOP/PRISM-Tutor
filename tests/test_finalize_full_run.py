@@ -219,6 +219,27 @@ def test_finalize_paper_artifacts_uses_full_run_prefix(tmp_path: Path) -> None:
     assert paper_command["argv"][paper_command["argv"].index("--shard-plan") + 1] == str(plan)
 
 
+def test_finalize_allows_incomplete_tables_only_for_smoke(tmp_path: Path) -> None:
+    base = {
+        "output_dir": str(tmp_path / "out"),
+        "gold": "data/splits",
+        "run_judge": False,
+        "allow_mock_judge": False,
+        "run_human_agreement": False,
+        "allow_unlabeled_agreement": False,
+        "judge_config": "configs/judge.yaml",
+        "audit_n": 200,
+    }
+    formal_args = finalize.argparse.Namespace(**base, allow_incomplete=False)
+    smoke_args = finalize.argparse.Namespace(**base, allow_incomplete=True)
+
+    formal_tables = next(command for command in finalize.build_commands(formal_args) if command["name"] == "tables")
+    smoke_tables = next(command for command in finalize.build_commands(smoke_args) if command["name"] == "tables")
+
+    assert "--allow-incomplete-tables" not in formal_tables["argv"]
+    assert "--allow-incomplete-tables" in smoke_tables["argv"]
+
+
 def test_finalize_human_audit_uses_full_run_prerequisite_paths(tmp_path: Path) -> None:
     args = finalize.argparse.Namespace(
         output_dir=str(tmp_path / "out"),
