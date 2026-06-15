@@ -7,6 +7,8 @@ import argparse
 import json
 import shutil
 import sys
+import urllib.parse
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -55,32 +57,63 @@ def _download_hf_files(name: str, spec: dict[str, Any], *, dry_run: bool) -> dic
         "downloaded_files": [],
         "status": "dry_run" if dry_run else "pending",
         "errors": [],
+        "warnings": [],
     }
     if dry_run:
         return result
 
+    hf_hub_download = None
     try:
         from huggingface_hub import hf_hub_download
     except Exception as exc:
-        result["status"] = "failed"
-        result["errors"].append(f"huggingface_hub unavailable: {exc}")
-        return result
+        result["warnings"].append(f"huggingface_hub unavailable, using direct HTTPS fallback: {exc}")
 
     raw_path.mkdir(parents=True, exist_ok=True)
     for filename in files:
         try:
-            cached = hf_hub_download(
-                repo_id=str(spec["repo_id"]),
-                repo_type=str(spec.get("repo_type", "dataset")),
-                filename=filename,
-            )
             target = raw_path / Path(filename).name
-            shutil.copy2(cached, target)
+            if hf_hub_download is None:
+                _download_hf_file_direct(
+                    repo_id=str(spec["repo_id"]),
+                    repo_type=str(spec.get("repo_type", "dataset")),
+                    filename=filename,
+                    target=target,
+                )
+            else:
+                cached = hf_hub_download(
+                    repo_id=str(spec["repo_id"]),
+                    repo_type=str(spec.get("repo_type", "dataset")),
+                    filename=filename,
+                )
+                shutil.copy2(cached, target)
             result["downloaded_files"].append(str(target))
         except Exception as exc:
-            result["errors"].append(f"{filename}: {exc}")
+            result["warnings"].append(f"{filename}: hf_hub_download failed, trying direct HTTPS fallback: {exc}")
+            try:
+                target = raw_path / Path(filename).name
+                _download_hf_file_direct(
+                    repo_id=str(spec["repo_id"]),
+                    repo_type=str(spec.get("repo_type", "dataset")),
+                    filename=filename,
+                    target=target,
+                )
+                result["downloaded_files"].append(str(target))
+            except Exception as fallback_exc:
+                result["errors"].append(f"{filename}: {fallback_exc}")
     result["status"] = "completed" if not result["errors"] else "failed"
     return result
+
+
+def _download_hf_file_direct(*, repo_id: str, repo_type: str, filename: str, target: Path) -> None:
+    repo_prefix = "datasets/" if repo_type == "dataset" else ""
+    quoted_repo = "/".join(urllib.parse.quote(part) for part in repo_id.split("/"))
+    quoted_filename = "/".join(urllib.parse.quote(part) for part in filename.split("/"))
+    url = f"https://huggingface.co/{repo_prefix}{quoted_repo}/resolve/main/{quoted_filename}"
+    request = urllib.request.Request(url, headers={"User-Agent": "prism-tutor-dataset-downloader/0.1"})
+    with urllib.request.urlopen(request, timeout=120) as response:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open("wb") as handle:
+            shutil.copyfileobj(response, handle)
 
 
 def _check_manual_dataset(name: str, spec: dict[str, Any], *, strict: bool) -> dict[str, Any]:
