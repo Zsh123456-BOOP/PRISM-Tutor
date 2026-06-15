@@ -72,10 +72,12 @@ def build_experiment_manifest(
             by_exp[str(exp_name)] = item
     by_exp = {**plan_experiments, **by_exp}
     expected = list(plan_experiments) if plan_experiments else [f"exp{i}" for i in range(7)]
+    missing = [exp for exp in expected if exp not in by_exp]
     return {
+        "artifact_status": "failed" if missing else "passed",
         "experiments": by_exp,
         "expected_experiments": expected,
-        "missing_experiments": [exp for exp in expected if exp not in by_exp],
+        "missing_experiments": missing,
         "root": str(root),
     }
 
@@ -152,12 +154,17 @@ def build_artifact_index(root: Path, artifact_prefix: str = DEFAULT_ARTIFACT_PRE
 
 
 def build_experiment_summary(manifest: dict[str, Any], checklist: dict[str, Any], artifact_index: str) -> str:
+    final_status = "passed"
+    if manifest.get("artifact_status") != "passed" or checklist.get("status") != "passed":
+        final_status = "failed"
     lines = [
         "# Experiment Summary",
         "",
         "PRISM-Tutor is evaluated as an inference-time runtime; no model training artifacts are expected.",
         "",
+        f"Final artifact status: **{final_status}**",
         f"Checklist status: **{checklist.get('status')}**",
+        f"Experiment manifest status: **{manifest.get('artifact_status')}**",
         f"Missing experiments: {', '.join(manifest.get('missing_experiments', [])) or 'none'}",
         "",
         "## Artifact Traceability",

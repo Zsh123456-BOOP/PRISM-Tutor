@@ -70,8 +70,12 @@ def test_export_paper_artifacts_writes_index_summary_and_manifest(tmp_path):
     )
 
     assert files["experiment_summary"].exists()
-    assert "PRISM-Tutor" in files["experiment_summary"].read_text(encoding="utf-8")
+    summary = files["experiment_summary"].read_text(encoding="utf-8")
+    assert "PRISM-Tutor" in summary
+    assert "Final artifact status: **failed**" in summary
+    assert "Experiment manifest status: **failed**" in summary
     manifest = json.loads(files["experiment_manifest"].read_text(encoding="utf-8"))
+    assert manifest["artifact_status"] == "failed"
     assert "exp0" in manifest["experiments"]
     assert "exp1" in manifest["missing_experiments"]
     assert "`outputs/metrics/significance_tests.json`" in files["artifact_index"].read_text(encoding="utf-8")
@@ -159,9 +163,12 @@ def test_export_paper_artifacts_populates_manifest_from_shard_plan(tmp_path):
     )
 
     manifest = json.loads(files["experiment_manifest"].read_text(encoding="utf-8"))
+    summary = files["experiment_summary"].read_text(encoding="utf-8")
     exp0 = manifest["experiments"]["exp0_problem_diagnosis"]
     assert "None" not in manifest["experiments"]
+    assert manifest["artifact_status"] == "passed"
     assert manifest["missing_experiments"] == []
+    assert "Experiment manifest status: **passed**" in summary
     assert exp0["methods"] == ["single_tutor", "ours_full"]
     assert exp0["job_count"] == 1
     assert exp0["estimated_records"] == 10

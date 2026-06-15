@@ -21,7 +21,7 @@
 - [x] 13 实验矩阵：`configs/experiments.yaml` 与 `scripts/run_exp*.sh`。
 - [x] 14 统计、表格和图：`scripts/05_make_tables.py`、`scripts/06_make_figures.py`。
 - [x] 15 Human audit：`scripts/07_sample_human_audit.py`、`scripts/08_human_agreement.py`。
-- [x] 16 Paper artifacts：`scripts/09_export_paper_artifacts.py`。
+- [x] 16 Paper artifacts：`scripts/09_export_paper_artifacts.py`；paper artifact summary 会在 missing experiments 或 checklist failure 时标记 final artifact status failed，避免 incomplete artifacts 显示为 passed。
 
 ## 已验证命令
 
