@@ -205,6 +205,7 @@ def main(argv: list[str] | None = None) -> int:
     commands = build_commands(args)
     step_log_dir = args.step_log_dir or str(Path(args.output_dir) / "logs" / "finalization")
     steps = [_run_command(step, args.dry_run, step_log_dir) for step in commands]
+    planned_steps = [step["name"] for step in steps]
     status = "planned" if args.dry_run else ("completed" if all(step["status"] == "completed" for step in steps) else "failed")
     manifest = {
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -215,6 +216,7 @@ def main(argv: list[str] | None = None) -> int:
         "allow_unlabeled_agreement": args.allow_unlabeled_agreement,
         "shard_status": summary,
         **completion,
+        "planned_steps": planned_steps,
         "step_log_dir": step_log_dir,
         "steps": steps,
     }
@@ -228,7 +230,7 @@ def main(argv: list[str] | None = None) -> int:
                 "manifest": str(output),
                 "shard_status": summary,
                 **completion,
-                "planned_steps": [step["name"] for step in steps],
+                "planned_steps": planned_steps,
                 "run_judge": args.run_judge,
                 "run_human_agreement": args.run_human_agreement,
                 "allow_unlabeled_agreement": args.allow_unlabeled_agreement,

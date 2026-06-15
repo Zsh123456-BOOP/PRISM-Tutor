@@ -86,6 +86,13 @@ def test_finalize_dry_run_writes_planned_manifest(tmp_path: Path) -> None:
         "human_audit_sample",
         "paper_artifacts",
     ]
+    assert payload["planned_steps"] == [
+        "auto_metrics",
+        "tables",
+        "figures",
+        "human_audit_sample",
+        "paper_artifacts",
+    ]
     assert payload["step_log_dir"] == str(tmp_path / "out" / "logs" / "finalization")
 
 
