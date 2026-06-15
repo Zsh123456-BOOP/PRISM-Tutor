@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-本仓库已经具备 Task Card 01-16 的可运行代码骨架、mock/dry-run 端到端链路，以及服务器上的 Qwen3-8B vLLM live smoke 链路。MathDial、Bridge 与 MaE Math Misconceptions 三个真实数据集均已下载、传输到服务器并完成 schema build。Exp0-Exp6 已完成真实 Qwen live smoke（limit=1）与 downstream metrics/tables/figures/artifact smoke；真实 DeepSeek judge 已对 live smoke 123 条 generation 完成评分。runner 已支持 sample-level sharding，用于拆分全量正式实验，并已支持 `maintain --target-running N` 与 `supervise` 可恢复补齐后台并发。全量完成后可用 `scripts/12_finalize_full_run.py` gated finalization 生成 metrics/tables/figures/human audit sample/paper artifacts；finalization manifest/stdout 会输出 completed/total/can_finalize/planned_steps，并会让 paper artifact exporter 检查 `outputs/full_run/*` run-local 产物；`scripts/11_plan_or_run_shards.py progress` 可从 supervisor log 输出完成率、近期吞吐、ETA 与 health summary，并可识别 running 超过 supervisor target 的情况。当前全量 Exp0-Exp6 正式实验已经开始运行并由服务器 supervisor 接管，但尚未完成；也尚未执行正式人工标注版 200 条 blind human audit。
+本仓库已经具备 Task Card 01-16 的可运行代码骨架、mock/dry-run 端到端链路，以及服务器上的 Qwen3-8B vLLM live smoke 链路。MathDial、Bridge 与 MaE Math Misconceptions 三个真实数据集均已下载、传输到服务器并完成 schema build。Exp0-Exp6 已完成真实 Qwen live smoke（limit=1）与 downstream metrics/tables/figures/artifact smoke；真实 DeepSeek judge 已对 live smoke 123 条 generation 完成评分。runner 已支持 sample-level sharding，用于拆分全量正式实验，并已支持 `maintain --target-running N` 与 `supervise` 可恢复补齐后台并发。全量完成后可用 `scripts/12_finalize_full_run.py` gated finalization 生成 metrics/tables/figures/human audit sample/paper artifacts；finalization manifest/stdout 会输出 completed/total/can_finalize/planned_steps，并会让 paper artifact exporter 检查 `outputs/full_run/*` run-local 产物；human audit sampler 会在正式模式下要求 metrics、generation logs、judge scores 和 tables 全部存在，并用 generation logs 回填 blind CSV 所需 response/context 字段；`scripts/11_plan_or_run_shards.py progress` 可从 supervisor log 输出完成率、近期吞吐、ETA 与 health summary，并可识别 running 超过 supervisor target 的情况。当前全量 Exp0-Exp6 正式实验已经开始运行并由服务器 supervisor 接管，但尚未完成；也尚未执行正式人工标注版 200 条 blind human audit。
 
 ## 已完成的代码路径
 
@@ -26,7 +26,7 @@
 ## 已验证命令
 
 - [x] 本机 `python -m compileall prism_tutor scripts data serving tests`
-- [x] 本机 `python -m pytest -q`，结果：65 passed。
+- [x] 本机 `python -m pytest -q`，结果：68 passed。
 - [x] 服务器 `python -m pytest -q`，结果：65 passed。
 - [x] `python scripts/00_prepare_env_check.py --config configs/default.yaml --dry-run`
 - [x] `python scripts/01_build_datasets.py --help`
@@ -47,6 +47,7 @@
 - [x] live smoke 自动指标：123 rows，aggregate 81 rows，routing missing gold `0`，orphan_generation_count `0`。
 - [x] live smoke 真实 DeepSeek judge：`outputs/exp_matrix_live_smoke/judge_scores_real_full`，123 rows，123 parsed，0 errors，metadata 记录 actual_model、api_date、temperature、top_p、max_tokens、thinking_type。
 - [x] live smoke blind audit 文件：`outputs/exp_matrix_live_smoke/human_audit_200`，目标 200，实际 123，shortage 已写入 sampling manifest。
+- [x] Human audit formal gate：`scripts/07_sample_human_audit.py` 正式模式缺少 judge scores 或 tables 时拒绝抽样；`--allow-incomplete` 仅用于 smoke，并会在 sampling manifest 记录 prerequisite 状态。
 - [x] 全量规模估算：`outputs/exp_matrix_live_smoke/full_run_estimate.json`，约 204,373 generation records、953,088 agent calls、1.6B tokens。
 - [x] Sharded runner dry-run 验证：`outputs/shard_smoke`，2 个 shard 无 sample overlap。
 - [x] Sharded runner live 验证：`outputs/shard_live_smoke`，Exp0 shard0 limit=1，15/15 success，metrics orphan_generation_count `0`。

@@ -95,7 +95,21 @@ def build_commands(args: argparse.Namespace) -> list[dict[str, Any]]:
             },
             {
                 "name": "human_audit_sample",
-                "argv": _cmd("scripts/07_sample_human_audit.py", "--records", str(Path(metrics) / "record_auto_metrics.jsonl"), "--generations", generations, "--n", str(args.audit_n), "--output_dir", human_audit),
+                "argv": _cmd(
+                    "scripts/07_sample_human_audit.py",
+                    "--records",
+                    str(Path(metrics) / "record_auto_metrics.jsonl"),
+                    "--generations",
+                    generations,
+                    "--judge-scores",
+                    str(Path(args.output_dir) / "judge_scores" / "judge_scores.jsonl"),
+                    "--tables",
+                    tables,
+                    "--n",
+                    str(args.audit_n),
+                    "--output_dir",
+                    human_audit,
+                ),
             },
             {
                 "name": "paper_artifacts",

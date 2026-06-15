@@ -116,3 +116,24 @@ def test_finalize_paper_artifacts_uses_full_run_prefix(tmp_path: Path) -> None:
 
     assert "--artifact-prefix" in paper_command["argv"]
     assert paper_command["argv"][paper_command["argv"].index("--artifact-prefix") + 1] == str(tmp_path / "out")
+
+
+def test_finalize_human_audit_uses_full_run_prerequisite_paths(tmp_path: Path) -> None:
+    args = finalize.argparse.Namespace(
+        output_dir=str(tmp_path / "out"),
+        gold="data/splits",
+        run_judge=True,
+        judge_config="configs/judge.yaml",
+        audit_n=200,
+    )
+
+    commands = finalize.build_commands(args)
+    audit_command = next(command for command in commands if command["name"] == "human_audit_sample")
+
+    assert audit_command["argv"][audit_command["argv"].index("--records") + 1] == str(
+        tmp_path / "out" / "metrics" / "record_auto_metrics.jsonl"
+    )
+    assert audit_command["argv"][audit_command["argv"].index("--judge-scores") + 1] == str(
+        tmp_path / "out" / "judge_scores" / "judge_scores.jsonl"
+    )
+    assert audit_command["argv"][audit_command["argv"].index("--tables") + 1] == str(tmp_path / "out" / "tables")
