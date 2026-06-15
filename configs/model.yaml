@@ -16,6 +16,8 @@ gpu_memory_utilization: 0.88
 tensor_parallel_size: 2
 use_modelscope: true
 enable_thinking: false
+extra_env:
+  VLLM_USE_FLASHINFER_SAMPLER: "0"
 preferred_devices:
   gpu0: "2"
   gpu1: "3"

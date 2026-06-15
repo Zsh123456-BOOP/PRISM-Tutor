@@ -42,6 +42,8 @@ def build_vllm_command(config: dict[str, Any], profile: str) -> tuple[dict[str, 
         "VLLM_USE_MODELSCOPE": "true" if use_modelscope else "false",
         "CUDA_VISIBLE_DEVICES": devices,
     }
+    for key, value in (config.get("extra_env") or {}).items():
+        env[str(key)] = str(value)
 
     command = [
         "python",
