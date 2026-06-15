@@ -1,0 +1,65 @@
+seed: 42
+project_name: prism_tutor
+
+paths:
+  data_raw: data/raw
+  data_processed: data/processed
+  data_splits: data/splits
+  outputs: outputs
+  logs: outputs/logs
+  generations: outputs/generations
+  judge_scores: outputs/judge_scores
+  metrics: outputs/metrics
+  tables: outputs/tables
+  figures: outputs/figures
+  human_audit: outputs/human_audit
+  paper_artifacts: outputs/paper_artifacts
+
+model:
+  generator: Qwen/Qwen3-8B
+  dtype: bfloat16
+  quantization: null
+  max_model_len: 8192
+  use_modelscope: true
+  enable_thinking: false
+  endpoints:
+    - base_url: http://localhost:8000/v1
+      model: qwen3-8b-gpu0
+    - base_url: http://localhost:8001/v1
+      model: qwen3-8b-gpu1
+
+generation:
+  temperature: 0.2
+  top_p: 0.8
+  top_k: 20
+  max_tokens:
+    agent_internal: 768
+    final_response: 384
+    verifier: 512
+    judge: 768
+  timeout_seconds: 120
+  retries: 1
+
+risk_weights:
+  misconception_risk: 0.30
+  pedagogy_risk: 0.25
+  answer_uncertainty: 0.20
+  leakage_risk: 0.15
+  state_conflict_risk: 0.10
+
+thresholds:
+  low_risk: 0.25
+  medium_risk: 0.55
+  high_risk: 0.75
+  misconception_confidence_commit: 0.70
+  leakage_block_threshold: 0.50
+  state_conflict_block_threshold: 0.40
+
+budget:
+  max_rounds: 3
+  max_agents: 5
+  max_tokens_per_case: 4000
+
+cuda:
+  expected_gpu_count: 2
+  preferred_devices: "2,3"

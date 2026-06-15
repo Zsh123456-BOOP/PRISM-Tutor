@@ -1,0 +1,18 @@
+"""Final student-facing tutor agent wrapper."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from .base_client import BaseLLMClient
+from .runner import run_agent
+from .schemas import FinalTutorOutput
+from .types import LLMCallRecord
+
+
+class FinalTutorAgent:
+    name = "final_tutor"
+    schema = FinalTutorOutput
+
+    def invoke(self, sample: dict[str, Any], state: dict[str, Any], client: BaseLLMClient, method: str) -> LLMCallRecord:
+        return run_agent(agent_name=self.name, schema=self.schema, sample=sample, state=state, client=client, method=method)

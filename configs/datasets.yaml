@@ -1,0 +1,27 @@
+{
+  "seed": 42,
+  "report_path": "outputs/logs/dataset_report.json",
+  "datasets": {
+    "mathdial": {
+      "enabled": true,
+      "raw_path": "data/raw/mathdial",
+      "processed_path": "data/processed/mathdial.jsonl",
+      "split_prefix": "data/splits/mathdial",
+      "split_strategy": "official_split_if_present_else_conversation_80_10_10"
+    },
+    "bridge": {
+      "enabled": true,
+      "raw_path": "data/raw/bridge",
+      "processed_path": "data/processed/bridge.jsonl",
+      "split_prefix": "data/splits/bridge",
+      "split_strategy": "stratified_20_dev_80_test_by_error_or_remediation"
+    },
+    "misconception": {
+      "enabled": true,
+      "raw_path": "data/raw/misconception",
+      "processed_path": "data/processed/misconception.jsonl",
+      "split_prefix": "data/splits/misconception",
+      "split_strategy": "all_heldout_test_with_bootstrap_sample_index"
+    }
+  }
+}

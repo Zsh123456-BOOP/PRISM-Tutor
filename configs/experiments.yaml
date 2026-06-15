@@ -1,0 +1,42 @@
+experiments:
+  exp0_problem_diagnosis:
+    datasets: [mathdial, bridge, misconception]
+    split: test
+    methods: [single_tutor, fixed_2, fixed_4, debate, generic_sparse]
+  exp1_routing:
+    datasets: [bridge, mathdial]
+    split: test
+    methods: [random_routing, fixed_all_agents, difficulty_routing, generic_sparse, oracle_routing, ours_routing]
+  exp2_budget:
+    datasets: [mathdial, misconception]
+    split: test
+    methods: [single_round, fixed_2_rounds, fixed_3_rounds, fixed_4_rounds, debate, generic_early_stopping, ours_routing_budget]
+  exp3_state_commit:
+    datasets: [mathdial, bridge]
+    split: test
+    methods: [no_memory, naive_shared_memory, single_writer, two_phase_commit, ours_full]
+  exp4_end_to_end:
+    datasets: [mathdial, bridge, misconception]
+    split: test
+    methods: [single_tutor, fixed_2, fixed_4, debate, generic_sparse, difficulty_routing, ours_routing, ours_routing_budget, ours_full]
+  exp5_ablation:
+    datasets: [mathdial, bridge, misconception]
+    split: test
+    methods:
+      - ours_full
+      - ablate_risk_estimator
+      - ablate_qos_routing
+      - ablate_budget_controller
+      - ablate_leakage_risk
+      - ablate_misconception_risk
+      - ablate_state_conflict_risk
+      - ablate_state_commit
+      - ablate_confidence_weighted_commit
+      - replace_pedagogical_risk_with_difficulty
+      - replace_two_phase_commit_with_naive_memory
+  exp6_robustness:
+    datasets: [mathdial, bridge, misconception]
+    split: test
+    methods: [fixed_4, debate, generic_sparse, ours_full]
+    noisy_agent_probabilities: [0.2, 0.4]
+    token_budgets: [1000, 2000, 4000]

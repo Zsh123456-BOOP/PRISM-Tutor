@@ -1,0 +1,22 @@
+generator: Qwen/Qwen3-8B
+served_model_names:
+  gpu0: qwen3-8b-gpu0
+  gpu1: qwen3-8b-gpu1
+  tp2: qwen3-8b
+host: 0.0.0.0
+ports:
+  gpu0: 8000
+  gpu1: 8001
+  tp2: 8000
+dtype: bfloat16
+max_model_len:
+  single_gpu: 8192
+  tensor_parallel: 16384
+gpu_memory_utilization: 0.88
+tensor_parallel_size: 2
+use_modelscope: true
+enable_thinking: false
+preferred_devices:
+  gpu0: "2"
+  gpu1: "3"
+  tp2: "2,3"

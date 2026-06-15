@@ -1,0 +1,54 @@
+import os
+
+import pytest
+
+from prism_tutor.eval.judge_client import JudgeClientConfig, make_judge_client
+from prism_tutor.eval.judge_merge import merge_leakage
+from prism_tutor.eval.judge_schema import parse_score_json
+
+
+def test_mock_judge_is_default_and_records_metadata(monkeypatch):
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.delenv("PRISM_TUTOR_ENABLE_REAL_JUDGE", raising=False)
+    client = make_judge_client()
+
+    result = client.judge(
+        {
+            "sample_id": "s1",
+            "dataset": "mathdial",
+            "method": "ours",
+            "problem": "1+1",
+            "candidate_response": "The answer is 2.",
+            "ground_truth": "2",
+        }
+    )
+
+    assert result["metadata"]["dry_run"] is True
+    assert result["metadata"]["actual_model"] == "mock-judge"
+    assert result["parsed_score"]["answer_leakage"] is True
+    assert "api_key" not in str(result).lower()
+
+
+def test_real_judge_requires_explicit_env(monkeypatch):
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.delenv("PRISM_TUTOR_ENABLE_REAL_JUDGE", raising=False)
+
+    with pytest.raises(RuntimeError):
+        make_judge_client(JudgeClientConfig(provider="deepseek"))
+
+
+def test_parse_score_json_and_merge_leakage():
+    parsed = parse_score_json(
+        '{"mathematical_correctness": 4, "pedagogical_quality": 3, '
+        '"scaffolding_quality": 2, "misconception_coverage": 1, '
+        '"answer_leakage": false, "clarity": 5, '
+        '"student_facing_appropriateness": 4, "overall": 3, "reason": "ok"}'
+    )
+    merged = merge_leakage(
+        {"sample_id": "s1", "rule_leakage": True, "matched_rules": ["direct_answer_phrase"]},
+        {"sample_id": "s1", "parsed_score": parsed.to_dict()},
+    )
+
+    assert merged["judge_leakage"] is False
+    assert merged["final_leakage"] is True
+    assert merged["leakage_conflict"] is True

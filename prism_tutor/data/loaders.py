@@ -1,0 +1,258 @@
+"""Dataset-specific raw loaders."""
+
+from __future__ import annotations
+
+from collections.abc import Iterator, Mapping
+from pathlib import Path
+from typing import Any
+
+from .io import read_raw_records
+from .schema import first_present, make_record, stable_hash
+
+
+ID_FIELDS = ("id", "record_id", "sample_id", "example_id", "uid", "question_id")
+
+
+def load_mathdial(raw_path: str | Path) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for raw_record, source_file, source_index in read_raw_records(raw_path):
+        for turn_index, sample in enumerate(_iter_mathdial_samples(raw_record)):
+            raw_record_id = _raw_id(
+                sample,
+                source_file,
+                source_index,
+                suffix=turn_index if turn_index else None,
+            )
+            conversation_id = first_present(
+                sample,
+                (
+                    "conversation_id",
+                    "conversationId",
+                    "dialogue_id",
+                    "dialog_id",
+                    "chat_id",
+                    "id",
+                ),
+            )
+            values = {
+                "conversation_id": conversation_id or raw_record_id,
+                "problem_text": first_present(
+                    sample,
+                    (
+                        "problem_text",
+                        "problem",
+                        "question",
+                        "math_problem",
+                        "prompt",
+                        "context.problem",
+                        "scenario",
+                    ),
+                ),
+                "student_utterance": first_present(
+                    sample,
+                    (
+                        "student_utterance",
+                        "student_response",
+                        "student_answer",
+                        "student",
+                        "learner_utterance",
+                        "learner_response",
+                    ),
+                ),
+                "tutor_response": first_present(
+                    sample,
+                    (
+                        "tutor_response",
+                        "teacher_response",
+                        "tutor",
+                        "teacher",
+                        "response",
+                        "assistant_response",
+                    ),
+                ),
+                "scaffolding": first_present(
+                    sample,
+                    ("scaffolding", "scaffold", "hints", "hint", "pedagogical_moves"),
+                ),
+                "leakage": first_present(
+                    sample,
+                    (
+                        "leakage",
+                        "answer_leakage",
+                        "contains_answer",
+                        "leaked_answer",
+                        "answer_leak",
+                    ),
+                ),
+            }
+            metadata = _metadata(sample, official_split=_official_split(sample))
+            records.append(
+                make_record(
+                    dataset="mathdial",
+                    raw_record_id=raw_record_id,
+                    values=values,
+                    source_file=str(source_file),
+                    metadata=metadata,
+                )
+            )
+    return records
+
+
+def load_bridge(raw_path: str | Path) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for raw_record, source_file, source_index in read_raw_records(raw_path):
+        raw_record_id = _raw_id(raw_record, source_file, source_index)
+        values = {
+            "conversation_id": first_present(
+                raw_record,
+                ("conversation_id", "dialogue_id", "dialog_id", "id"),
+            ),
+            "problem_text": first_present(
+                raw_record,
+                ("problem_text", "problem", "question", "math_problem", "prompt", "context"),
+            ),
+            "student_utterance": first_present(
+                raw_record,
+                (
+                    "student_utterance",
+                    "student_response",
+                    "student_answer",
+                    "student",
+                    "learner_response",
+                ),
+            ),
+            "student_error": first_present(
+                raw_record,
+                ("student_error", "error_type", "error", "misstep", "bug", "label"),
+            ),
+            "remediation_strategy": first_present(
+                raw_record,
+                (
+                    "remediation_strategy",
+                    "remediation",
+                    "strategy",
+                    "feedback_strategy",
+                    "intervention",
+                ),
+            ),
+            "teacher_intention": first_present(
+                raw_record,
+                ("teacher_intention", "teacher_intent", "intention", "goal", "teaching_goal"),
+            ),
+        }
+        records.append(
+            make_record(
+                dataset="bridge",
+                raw_record_id=raw_record_id,
+                values=values,
+                source_file=str(source_file),
+                metadata=_metadata(raw_record),
+            )
+        )
+    return records
+
+
+def load_misconception(raw_path: str | Path) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for raw_record, source_file, source_index in read_raw_records(raw_path):
+        raw_record_id = _raw_id(raw_record, source_file, source_index)
+        values = {
+            "problem_text": first_present(
+                raw_record,
+                ("problem_text", "problem", "question", "math_problem", "prompt"),
+            ),
+            "student_utterance": first_present(
+                raw_record,
+                (
+                    "student_utterance",
+                    "student_response",
+                    "student_answer",
+                    "answer",
+                    "response",
+                ),
+            ),
+            "misconception_label": first_present(
+                raw_record,
+                (
+                    "misconception_label",
+                    "misconception",
+                    "misconception_type",
+                    "diagnosis",
+                    "label",
+                    "gold_label",
+                ),
+            ),
+            "sample_index": source_index,
+        }
+        records.append(
+            make_record(
+                dataset="misconception",
+                raw_record_id=raw_record_id,
+                values=values,
+                source_file=str(source_file),
+                metadata=_metadata(raw_record),
+            )
+        )
+    return records
+
+
+def _iter_mathdial_samples(record: Mapping[str, Any]) -> Iterator[dict[str, Any]]:
+    turns = first_present(record, ("turns", "dialogue", "dialog", "messages", "conversation"))
+    if not isinstance(turns, list):
+        yield dict(record)
+        return
+
+    base = {key: value for key, value in record.items() if key not in {"turns", "dialogue", "dialog", "messages", "conversation"}}
+    last_student: Any = first_present(base, ("student_utterance", "student_response", "student_answer"))
+    emitted = False
+
+    for index, turn in enumerate(turns):
+        if not isinstance(turn, Mapping):
+            continue
+        role = str(first_present(turn, ("role", "speaker", "author")) or "").lower()
+        text = first_present(turn, ("text", "content", "utterance", "message", "response"))
+        if role in {"student", "learner", "user"}:
+            last_student = text
+            continue
+        if role in {"tutor", "teacher", "assistant"}:
+            sample = dict(base)
+            sample.update(dict(turn))
+            sample.setdefault("student_utterance", last_student)
+            sample.setdefault("tutor_response", text)
+            sample.setdefault("turn_index", index)
+            yield sample
+            emitted = True
+
+    if not emitted:
+        sample = dict(base)
+        sample["dialogue_turns"] = turns
+        yield sample
+
+
+def _raw_id(record: Mapping[str, Any], source_file: Path, source_index: int, suffix: int | None = None) -> str:
+    value = first_present(record, ID_FIELDS)
+    if value is None:
+        value = f"{source_file.name}:{source_index}"
+    raw_id = str(value)
+    if suffix is not None:
+        raw_id = f"{raw_id}:{suffix}"
+    return raw_id
+
+
+def _official_split(record: Mapping[str, Any]) -> str | None:
+    split = first_present(record, ("split", "official_split", "partition", "set"))
+    if split is None:
+        return None
+    normalized = str(split).strip().lower()
+    if normalized in {"validation", "valid", "val"}:
+        return "dev"
+    if normalized in {"train", "dev", "test"}:
+        return normalized
+    return normalized or None
+
+
+def _metadata(record: Mapping[str, Any], official_split: str | None = None) -> dict[str, Any]:
+    metadata: dict[str, Any] = {"raw_fingerprint": stable_hash(record, length=16)}
+    if official_split:
+        metadata["official_split"] = official_split
+    return metadata
