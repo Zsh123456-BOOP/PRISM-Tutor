@@ -248,9 +248,17 @@ def _content_checks(root: Path, rel_paths: list[str]) -> list[dict[str, Any]]:
                     "actual_status": payload.get("status"),
                 }
             )
-        elif rel.endswith(".csv") and "/tables/" in rel:
+        elif rel.endswith(".csv") and ("/tables/" in rel or rel.endswith("human_audit_blind.csv")):
             rows = _count_csv_rows(path)
             checks.append({"name": f"{rel}:content", "status": "passed" if rows > 0 else "failed", "rows": rows})
+        elif rel.endswith("preference_mapping.json"):
+            payload = _load_optional_json(path)
+            rows = len(payload) if isinstance(payload, list) else 0
+            checks.append({"name": f"{rel}:content", "status": "passed" if rows > 0 else "failed", "rows": rows})
+        elif rel.endswith("sampling_manifest.json"):
+            payload = _load_optional_json(path) or {}
+            actual_n = _as_int(payload.get("actual_n")) or 0
+            checks.append({"name": f"{rel}:content", "status": "passed" if actual_n > 0 else "failed", "actual_n": actual_n})
         elif rel.endswith("record_auto_metrics.jsonl") or rel.endswith("judge_raw.jsonl"):
             rows = _count_jsonl_rows(path)
             checks.append({"name": f"{rel}:content", "status": "passed" if rows > 0 else "failed", "rows": rows})

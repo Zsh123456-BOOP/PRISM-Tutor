@@ -224,6 +224,8 @@ def test_default_paper_artifact_paths_require_concrete_tables_figures_and_metric
     assert "outputs/full_run/tables/table6_robustness.tex" in required
     assert "outputs/full_run/figures/figure2_quality_token_pareto.pdf" in required
     assert "outputs/full_run/figures/figure_manifest.json" in required
+    assert "outputs/full_run/human_audit/human_audit_blind.csv" in required
+    assert "outputs/full_run/human_audit/preference_mapping.json" in required
 
     for rel in ["outputs/full_run/metrics", "outputs/full_run/tables", "outputs/full_run/figures"]:
         (tmp_path / rel).mkdir(parents=True, exist_ok=True)
@@ -244,12 +246,18 @@ def test_default_paper_artifact_paths_require_concrete_tables_figures_and_metric
 def test_checklist_fails_on_failed_artifact_content(tmp_path):
     table = tmp_path / "outputs" / "full_run" / "tables" / "table1_main_results.csv"
     figure_manifest = tmp_path / "outputs" / "full_run" / "figures" / "figure_manifest.json"
+    blind_csv = tmp_path / "outputs" / "full_run" / "human_audit" / "human_audit_blind.csv"
+    sampling_manifest = tmp_path / "outputs" / "full_run" / "human_audit" / "sampling_manifest.json"
+    preference_mapping = tmp_path / "outputs" / "full_run" / "human_audit" / "preference_mapping.json"
     agreement = tmp_path / "outputs" / "full_run" / "human_audit" / "human_agreement_report.json"
     table.parent.mkdir(parents=True)
     figure_manifest.parent.mkdir(parents=True)
     agreement.parent.mkdir(parents=True)
     table.write_text("dataset,method,n\n", encoding="utf-8")
     figure_manifest.write_text(json.dumps({"status": "failed"}), encoding="utf-8")
+    blind_csv.write_text("audit_id,sample_id\n", encoding="utf-8")
+    sampling_manifest.write_text(json.dumps({"actual_n": 0}), encoding="utf-8")
+    preference_mapping.write_text("[]", encoding="utf-8")
     agreement.write_text(json.dumps({"status": "failed"}), encoding="utf-8")
 
     checklist = build_reproducibility_checklist(
@@ -257,6 +265,9 @@ def test_checklist_fails_on_failed_artifact_content(tmp_path):
         [
             "outputs/full_run/tables/table1_main_results.csv",
             "outputs/full_run/figures/figure_manifest.json",
+            "outputs/full_run/human_audit/human_audit_blind.csv",
+            "outputs/full_run/human_audit/sampling_manifest.json",
+            "outputs/full_run/human_audit/preference_mapping.json",
             "outputs/full_run/human_audit/human_agreement_report.json",
         ],
     )
@@ -265,6 +276,9 @@ def test_checklist_fails_on_failed_artifact_content(tmp_path):
     checks = {check["name"]: check for check in checklist["checks"]}
     assert checks["outputs/full_run/tables/table1_main_results.csv:content"]["status"] == "failed"
     assert checks["outputs/full_run/figures/figure_manifest.json:content"]["actual_status"] == "failed"
+    assert checks["outputs/full_run/human_audit/human_audit_blind.csv:content"]["rows"] == 0
+    assert checks["outputs/full_run/human_audit/sampling_manifest.json:content"]["actual_n"] == 0
+    assert checks["outputs/full_run/human_audit/preference_mapping.json:content"]["rows"] == 0
     assert checks["outputs/full_run/human_audit/human_agreement_report.json:content"]["actual_status"] == "failed"
 
 

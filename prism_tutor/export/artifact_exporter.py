@@ -44,6 +44,9 @@ def default_required_paths(artifact_prefix: str = DEFAULT_ARTIFACT_PREFIX) -> li
         *[f"{prefix}/tables/{stem}.{ext}" for stem in table_stems for ext in ("csv", "tex")],
         f"{prefix}/figures",
         *[f"{prefix}/figures/{name}" for name in figure_files],
+        f"{prefix}/human_audit/human_audit_blind.csv",
+        f"{prefix}/human_audit/sampling_manifest.json",
+        f"{prefix}/human_audit/preference_mapping.json",
         f"{prefix}/human_audit/human_agreement_report.json",
     ]
 

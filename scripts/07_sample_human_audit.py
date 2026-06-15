@@ -109,6 +109,7 @@ def main(argv: list[str] | None = None) -> int:
     out = Path(args.output_dir)
     out.mkdir(parents=True, exist_ok=True)
     write_csv(out / "human_audit_blind.csv", result["blind_rows"], list(result["blind_rows"][0]) if result["blind_rows"] else ["audit_id"])
+    write_json(out / "preference_mapping.json", result.get("preference_mapping", []))
     write_json(out / "sampling_manifest.json", result["manifest"])
     print(json.dumps({"actual_n": result["manifest"]["actual_n"], "output_dir": str(out)}, indent=2))
     return 0

@@ -43,13 +43,15 @@ def spearman_correlation(values_a: list[Any], values_b: list[Any]) -> dict[str, 
 
 
 def preference_win_rate(rows: list[dict[str, Any]], ours_label: str = "ours") -> dict[str, Any]:
-    labels = [str(row.get("human_preference", "")).lower() for row in rows]
-    valid = [label for label in labels if label in {ours_label, "baseline", "tie"}]
+    labels = [str(row.get("human_preference_ab") or row.get("human_preference", "")).lower() for row in rows]
+    valid = [label for label in labels if label in {ours_label, "baseline", "tie", "a", "b"}]
     if not valid:
-        return {"n": 0, "ours_win_rate": None, "tie_rate": None}
+        return {"n": 0, "ours_win_rate": None, "candidate_a_rate": None, "candidate_b_rate": None, "tie_rate": None}
     return {
         "n": len(valid),
         "ours_win_rate": sum(label == ours_label for label in valid) / len(valid),
+        "candidate_a_rate": sum(label == "a" for label in valid) / len(valid),
+        "candidate_b_rate": sum(label == "b" for label in valid) / len(valid),
         "tie_rate": sum(label == "tie" for label in valid) / len(valid),
     }
 
