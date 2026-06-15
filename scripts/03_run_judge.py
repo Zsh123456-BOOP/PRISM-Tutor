@@ -52,15 +52,20 @@ def _stable_case_seed(row: dict, seed: int) -> int:
 def _candidate_rows(row: dict, *, seed: int) -> list[dict]:
     raw_candidates = row.get("candidate_responses")
     if isinstance(raw_candidates, list) and raw_candidates:
-        candidates = [
-            {
-                "candidate_label": str(candidate.get("label") or candidate.get("method") or f"candidate_{index + 1}"),
-                "method": candidate.get("method") or row.get("method"),
-                "candidate_response": candidate.get("candidate_response") or candidate.get("final_response") or candidate.get("response"),
-            }
-            for index, candidate in enumerate(raw_candidates)
-            if isinstance(candidate, dict)
-        ]
+        candidates = []
+        used_labels: dict[str, int] = {}
+        for index, candidate in enumerate(raw_candidates):
+            if not isinstance(candidate, dict):
+                continue
+            base_label = str(candidate.get("label") or candidate.get("method") or f"candidate_{index + 1}")
+            label = _unique_candidate_label(base_label, used_labels)
+            candidates.append(
+                {
+                    "candidate_label": label,
+                    "method": candidate.get("method") or row.get("method") or label,
+                    "candidate_response": candidate.get("candidate_response") or candidate.get("final_response") or candidate.get("response"),
+                }
+            )
     else:
         candidates = [
             {
@@ -89,6 +94,12 @@ def _candidate_rows(row: dict, *, seed: int) -> list[dict]:
             }
         )
     return rows
+
+
+def _unique_candidate_label(base_label: str, used_labels: dict[str, int]) -> str:
+    count = used_labels.get(base_label, 0) + 1
+    used_labels[base_label] = count
+    return base_label if count == 1 else f"{base_label}_{count}"
 
 
 def _run_metadata(judged: list[dict], *, dry_run: bool, requested_model: str | None) -> dict:

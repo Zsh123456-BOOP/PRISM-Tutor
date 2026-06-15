@@ -215,6 +215,34 @@ def test_judge_candidate_rows_have_stable_display_order():
     assert sorted(first[0]["display_order"]) == ["a", "b", "c"]
 
 
+def test_judge_candidate_rows_assign_unique_labels_when_missing_or_duplicate():
+    duplicate_row = {
+        "sample_id": "s1",
+        "dataset": "mathdial",
+        "method": "bundle",
+        "candidate_responses": [
+            {"method": "same", "final_response": "A"},
+            {"method": "same", "final_response": "B"},
+        ],
+    }
+    missing_row = {
+        "sample_id": "s2",
+        "dataset": "mathdial",
+        "candidate_responses": [
+            {"final_response": "A"},
+            {"final_response": "B"},
+        ],
+    }
+
+    duplicate_candidates = run_judge._candidate_rows(duplicate_row, seed=42)
+    missing_candidates = run_judge._candidate_rows(missing_row, seed=42)
+
+    assert sorted(item["candidate_label"] for item in duplicate_candidates) == ["same", "same_2"]
+    assert sorted(duplicate_candidates[0]["display_order"]) == ["same", "same_2"]
+    assert sorted(item["candidate_label"] for item in missing_candidates) == ["candidate_1", "candidate_2"]
+    assert {item["method"] for item in missing_candidates} == {"candidate_1", "candidate_2"}
+
+
 def test_run_judge_writes_display_order_fields(tmp_path):
     input_path = tmp_path / "generations.jsonl"
     output_dir = tmp_path / "judge"
