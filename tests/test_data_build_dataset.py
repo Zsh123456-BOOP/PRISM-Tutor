@@ -220,3 +220,40 @@ def test_bridge_official_fields_map_to_unified_schema(tmp_path):
     assert "Could you tell me" in bridge[0]["tutor_response"]
     assert bridge[0]["metadata"]["official_split"] == "train"
     assert report["datasets"]["bridge"]["field_completeness"]["student_error"] == 1.0
+
+
+def test_mae_misconception_fields_map_to_unified_schema(tmp_path):
+    _write_jsonl(tmp_path / "raw" / "mathdial" / "mathdial.jsonl", [])
+    _write_jsonl(tmp_path / "raw" / "bridge" / "bridge.jsonl", [])
+    (tmp_path / "raw" / "misconception").mkdir(parents=True)
+    (tmp_path / "raw" / "misconception" / "data.json").write_text(
+        json.dumps(
+            [
+                {
+                    "Misconception": "students confuse numerator and denominator",
+                    "Misconception ID": "MaE01",
+                    "Topic": "Number sense",
+                    "Example Number": 1,
+                    "Question": "What part is shaded?",
+                    "Incorrect Answer": "1/3",
+                    "Correct Answer": "1/4",
+                    "Source": "Ashlock, 2006",
+                    "Explanation": "The answer counts unshaded parts.",
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    report = build_datasets(_config(tmp_path), strict=True)
+    misconception = read_jsonl(tmp_path / "processed" / "misconception.jsonl")
+    misconception_test = read_jsonl(tmp_path / "splits" / "misconception_test.jsonl")
+
+    assert len(misconception) == 1
+    assert misconception[0]["problem_text"] == "What part is shaded?"
+    assert misconception[0]["student_utterance"] == "1/3"
+    assert misconception[0]["misconception_label"] == "students confuse numerator and denominator"
+    assert misconception[0]["metadata"]["misconception_id"] == "MaE01"
+    assert misconception[0]["metadata"]["topic"] == "Number sense"
+    assert misconception_test[0]["bootstrap_index"] == 0
+    assert report["datasets"]["misconception"]["field_completeness"]["misconception_label"] == 1.0

@@ -27,10 +27,14 @@ datasets:
     notes: Bridge dataset from rosewang2008/bridge, dataset directory.
 
   misconception:
-    source_type: manual_required
+    source_type: github_files
+    repo: nancyotero-projects/math-misconceptions
+    ref: main
     raw_path: data/raw/misconception
-    expected_files: "*.jsonl, *.json, or *.csv"
+    files:
+      - source_path: data/data.json
+        target_name: data.json
+    license: MIT
     notes: >
-      The project plan requires the 220-example, 55-class Math Misconception
-      Benchmark. Do not substitute larger unrelated misconception datasets
-      unless the experiment manifest explicitly labels them as substitute data.
+      MaE Math Misconceptions and Errors dataset: 220 diagnostic examples
+      covering 55 middle-school algebra misconceptions.

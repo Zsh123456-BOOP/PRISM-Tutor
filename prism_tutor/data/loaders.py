@@ -175,7 +175,7 @@ def load_misconception(raw_path: str | Path) -> list[dict[str, Any]]:
         values = {
             "problem_text": first_present(
                 raw_record,
-                ("problem_text", "problem", "question", "math_problem", "prompt"),
+                ("problem_text", "problem", "question", "Question", "math_problem", "prompt"),
             ),
             "student_utterance": first_present(
                 raw_record,
@@ -183,6 +183,7 @@ def load_misconception(raw_path: str | Path) -> list[dict[str, Any]]:
                     "student_utterance",
                     "student_response",
                     "student_answer",
+                    "Incorrect Answer",
                     "answer",
                     "response",
                 ),
@@ -192,21 +193,40 @@ def load_misconception(raw_path: str | Path) -> list[dict[str, Any]]:
                 (
                     "misconception_label",
                     "misconception",
+                    "Misconception",
                     "misconception_type",
                     "diagnosis",
                     "label",
                     "gold_label",
+                    "Misconception ID",
                 ),
             ),
             "sample_index": source_index,
         }
+        metadata = _metadata(raw_record)
+        metadata.update(
+            {
+                key: value
+                for key, value in {
+                    "misconception_id": first_present(raw_record, ("Misconception ID", "misconception_id")),
+                    "topic": first_present(raw_record, ("Topic", "topic")),
+                    "example_number": first_present(raw_record, ("Example Number", "example_number")),
+                    "correct_answer": first_present(raw_record, ("Correct Answer", "correct_answer", "ground_truth")),
+                    "explanation": first_present(raw_record, ("Explanation", "student_reasoning", "reasoning")),
+                    "source": first_present(raw_record, ("Source", "source")),
+                    "question_image": first_present(raw_record, ("Question image", "question_image")),
+                    "learner_answer_image": first_present(raw_record, ("Learner Answer image", "learner_answer_image")),
+                }.items()
+                if value not in (None, "")
+            }
+        )
         records.append(
             make_record(
                 dataset="misconception",
                 raw_record_id=raw_record_id,
                 values=values,
                 source_file=str(source_file),
-                metadata=_metadata(raw_record),
+                metadata=metadata,
             )
         )
     return records
