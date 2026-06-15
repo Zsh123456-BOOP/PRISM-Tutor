@@ -27,7 +27,7 @@
 
 - [x] 本机 `python -m compileall prism_tutor scripts data serving tests`
 - [x] 本机 `python -m pytest -q`，结果：73 passed。
-- [x] 服务器 `python -m pytest -q`，结果：72 passed。
+- [x] 服务器 `python -m pytest -q`，结果：73 passed。
 - [x] `python scripts/00_prepare_env_check.py --config configs/default.yaml --dry-run`
 - [x] `python scripts/01_build_datasets.py --help`
 - [x] `bash serving/start_vllm_gpu0.sh`
@@ -62,7 +62,7 @@
 - [x] Experiment manifest shard-plan coverage：`scripts/09_export_paper_artifacts.py --shard-plan` 可从 full-run shard plan 生成 Exp0-Exp6 manifest 元数据，并过滤无 experiment/name 的旧日志 manifest。
 - [x] Table export coverage：`scripts/05_make_tables.py` 可自动生成 `table1_main_results` 至 `table6_robustness` 的 CSV/TeX，并写出 paired significance JSON。
 - [x] Shard progress report：`python scripts/11_plan_or_run_shards.py progress --plan outputs/full_run/shard_plan.json --supervisor-log outputs/full_run/logs/shards/supervisor_compact.jsonl --rate-window 5` 已在服务器验证，health summary 当前为 `ok`，并记录 `target_running`。
-- [x] 正式 full_run 后台运行：已完成 80 个 shard，18 个 shard 正在 running；最近检查 generation_rows `7994`、error_rows `0`，近期吞吐约 `86.67` rows/min，粗略 ETA 约 `37.83` hours，GPU2/GPU3 均 100% utilization，health summary 为 `ok`。
+- [x] 正式 full_run 后台运行：已完成 80 个 shard，18 个 shard 正在 running；最近检查 generation_rows `8136`、error_rows `0`，近期吞吐约 `84.49` rows/min，粗略 ETA 约 `38.71` hours，GPU2/GPU3 均 100% utilization，health summary 为 `ok`。
 
 ## 仍需服务器真实执行的项目
 
