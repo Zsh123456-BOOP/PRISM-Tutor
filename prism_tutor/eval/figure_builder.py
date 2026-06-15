@@ -10,6 +10,22 @@ from pathlib import Path
 from typing import Any
 
 
+class FigureInputError(ValueError):
+    """Raised when figure inputs cannot support the requested paper figure."""
+
+
+def require_nonempty_rows(rows: list[dict[str, Any]], *, context: str = "figure inputs") -> None:
+    if not rows:
+        raise FigureInputError(f"{context} has no rows")
+
+
+def require_columns(rows: list[dict[str, Any]], required: set[str], *, context: str) -> None:
+    require_nonempty_rows(rows, context=context)
+    missing = sorted(field for field in required if not any(field in row for row in rows))
+    if missing:
+        raise FigureInputError(f"{context} missing required columns: {', '.join(missing)}")
+
+
 def pareto_points(rows: list[dict[str, Any]], quality_field: str, cost_field: str) -> list[dict[str, Any]]:
     points = []
     for row in rows:
@@ -27,12 +43,57 @@ def pareto_points(rows: list[dict[str, Any]], quality_field: str, cost_field: st
     return points
 
 
+def require_pareto_points(rows: list[dict[str, Any]], quality_field: str, cost_field: str) -> list[dict[str, Any]]:
+    require_columns(rows, {"dataset", "method", quality_field, cost_field}, context="quality-token pareto figure")
+    points = pareto_points(rows, quality_field, cost_field)
+    if not points:
+        raise FigureInputError(
+            f"quality-token pareto figure has no numeric pairs for {quality_field} and {cost_field}"
+        )
+    return points
+
+
 def risk_bucket_counts(rows: list[dict[str, Any]], risk_field: str = "risk_bucket") -> dict[str, int]:
+    require_columns(rows, {risk_field}, context="risk bucket figure")
     counts: dict[str, int] = {}
     for row in rows:
         bucket = str(row.get(risk_field) or "missing")
         counts[bucket] = counts.get(bucket, 0) + 1
     return dict(sorted(counts.items()))
+
+
+def agent_call_distribution(rows: list[dict[str, Any]]) -> dict[str, int]:
+    require_columns(rows, {"agent_calls"}, context="agent call distribution figure")
+    counts: dict[str, int] = {}
+    for row in rows:
+        calls = row.get("agent_calls")
+        if isinstance(calls, (int, float)):
+            key = str(int(calls))
+            counts[key] = counts.get(key, 0) + 1
+    if not counts:
+        raise FigureInputError("agent call distribution figure has no numeric agent_calls values")
+    return dict(sorted(counts.items(), key=lambda item: int(item[0])))
+
+
+def state_conflict_case_lines(rows: list[dict[str, Any]], *, limit: int = 10) -> list[str]:
+    require_columns(rows, {"dataset", "sample_id", "method", "state_conflict_rate"}, context="state conflict figure")
+    numeric_rows = [row for row in rows if isinstance(row.get("state_conflict_rate"), (int, float))]
+    if not numeric_rows:
+        raise FigureInputError("state conflict figure has no numeric state_conflict_rate values")
+    cases = sorted(numeric_rows, key=lambda row: float(row.get("state_conflict_rate") or 0), reverse=True)
+    if float(cases[0].get("state_conflict_rate") or 0) <= 0:
+        return ["No state conflicts observed in record-level metrics."]
+    return [
+        " | ".join(
+            [
+                f"dataset={row.get('dataset')}",
+                f"sample_id={row.get('sample_id')}",
+                f"method={row.get('method')}",
+                f"state_conflict_rate={row.get('state_conflict_rate')}",
+            ]
+        )
+        for row in cases[:limit]
+    ]
 
 
 def write_text_pdf(path: str | Path, title: str, lines: list[str]) -> None:
