@@ -141,3 +141,135 @@ def test_human_agreement_formal_fails_when_no_two_annotator_overlap(tmp_path: Pa
     assert report["status"] == "failed"
     assert "too_few_quality_pairs" in report["formal_gate"]["failures"]
     assert "too_few_leakage_pairs" in report["formal_gate"]["failures"]
+
+
+def test_human_agreement_cli_resolves_pairwise_ab_preference_mapping(tmp_path: Path) -> None:
+    audit_dir = tmp_path / "outputs" / "full_run" / "human_audit"
+    audit_dir.mkdir(parents=True)
+    labeled = audit_dir / "human_audit_labeled.csv"
+    labeled.write_text(
+        "\n".join(
+            [
+                "audit_id,sample_id,dataset,annotator_id,human_quality_score,human_leakage_label,human_preference,human_preference_ab",
+                "A0001,s1,mathdial,a,4,no,,A",
+                "A0001,s1,mathdial,b,5,no,,A",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (audit_dir / "preference_mapping.json").write_text(
+        json.dumps(
+            [
+                {
+                    "audit_id": "A0001",
+                    "sample_id": "s1",
+                    "dataset": "mathdial",
+                    "candidate_a_is_ours": False,
+                    "candidate_b_is_ours": True,
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    output = audit_dir / "human_agreement_report.json"
+
+    rc = human_agreement_script.main(
+        [
+            "--input",
+            str(labeled),
+            "--output",
+            str(output),
+            "--min-quality-pairs",
+            "1",
+            "--min-leakage-pairs",
+            "1",
+            "--min-preferences",
+            "1",
+        ]
+    )
+    report = json.loads(output.read_text(encoding="utf-8"))
+
+    assert rc == 0
+    assert report["preference"]["n"] == 2
+    assert report["preference"]["ours_win_rate"] == 0.0
+    assert report["preference"]["candidate_a_rate"] == 1.0
+    assert report["preference_mapping"]["mapped_count"] == 2
+    assert report["status"] == "passed"
+
+
+def test_human_agreement_cli_formal_fails_for_ab_labels_without_mapping(tmp_path: Path) -> None:
+    audit_dir = tmp_path / "outputs" / "full_run" / "human_audit"
+    audit_dir.mkdir(parents=True)
+    labeled = audit_dir / "human_audit_labeled.csv"
+    labeled.write_text(
+        "\n".join(
+            [
+                "audit_id,sample_id,dataset,annotator_id,human_quality_score,human_leakage_label,human_preference,human_preference_ab",
+                "A0001,s1,mathdial,a,4,no,,A",
+                "A0001,s1,mathdial,b,5,no,,B",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    output = audit_dir / "human_agreement_report.json"
+
+    rc = human_agreement_script.main(
+        [
+            "--input",
+            str(labeled),
+            "--output",
+            str(output),
+            "--min-quality-pairs",
+            "1",
+            "--min-leakage-pairs",
+            "1",
+            "--min-preferences",
+            "1",
+        ]
+    )
+    report = json.loads(output.read_text(encoding="utf-8"))
+
+    assert rc == 1
+    assert report["preference_mapping"]["missing_mapping_file"].endswith("preference_mapping.json")
+    assert "unresolved_pairwise_preference_mapping" in report["formal_gate"]["failures"]
+
+
+def test_human_agreement_cli_allow_unlabeled_allows_missing_ab_mapping(tmp_path: Path) -> None:
+    audit_dir = tmp_path / "outputs" / "full_run" / "human_audit"
+    audit_dir.mkdir(parents=True)
+    labeled = audit_dir / "human_audit_labeled.csv"
+    labeled.write_text(
+        "\n".join(
+            [
+                "audit_id,sample_id,dataset,annotator_id,human_quality_score,human_leakage_label,human_preference,human_preference_ab",
+                "A0001,s1,mathdial,a,4,no,,A",
+                "A0001,s1,mathdial,b,5,no,,B",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    output = audit_dir / "human_agreement_report.json"
+
+    rc = human_agreement_script.main(
+        [
+            "--input",
+            str(labeled),
+            "--output",
+            str(output),
+            "--allow-unlabeled",
+            "--min-quality-pairs",
+            "1",
+            "--min-leakage-pairs",
+            "1",
+            "--min-preferences",
+            "1",
+        ]
+    )
+    report = json.loads(output.read_text(encoding="utf-8"))
+
+    assert rc == 0
+    assert report["status"] == "failed"
+    assert "unresolved_pairwise_preference_mapping" in report["formal_gate"]["failures"]

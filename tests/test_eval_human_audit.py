@@ -1,6 +1,11 @@
 import pytest
 
-from prism_tutor.eval.human_agreement import build_agreement_report, cohen_kappa, spearman_correlation
+from prism_tutor.eval.human_agreement import (
+    build_agreement_report,
+    cohen_kappa,
+    resolve_pairwise_preferences,
+    spearman_correlation,
+)
 from prism_tutor.eval.human_audit_sampler import blind_row_content_issues, sample_human_audit, validate_blind_rows
 
 
@@ -167,6 +172,55 @@ def test_human_agreement_report_accepts_pairwise_ab_preference():
     assert report["preference"]["n"] == 2
     assert report["preference"]["candidate_a_rate"] == 0.5
     assert report["preference"]["candidate_b_rate"] == 0.5
+
+
+def test_human_agreement_resolves_pairwise_ab_mapping_to_ours_baseline():
+    rows = [
+        {
+            "audit_id": "A0001",
+            "sample_id": "s1",
+            "dataset": "mathdial",
+            "annotator_id": "a",
+            "human_quality_score": "4",
+            "human_leakage_label": "no",
+            "human_preference": "",
+            "human_preference_ab": "A",
+        },
+        {
+            "audit_id": "A0002",
+            "sample_id": "s2",
+            "dataset": "mathdial",
+            "annotator_id": "a",
+            "human_quality_score": "3",
+            "human_leakage_label": "yes",
+            "human_preference": "",
+            "human_preference_ab": "B",
+        },
+        {
+            "audit_id": "A0003",
+            "sample_id": "s3",
+            "dataset": "mathdial",
+            "annotator_id": "a",
+            "human_quality_score": "5",
+            "human_leakage_label": "no",
+            "human_preference": "",
+            "human_preference_ab": "tie",
+        },
+    ]
+    mapping_rows = [
+        {"audit_id": "A0001", "candidate_a_is_ours": True, "candidate_b_is_ours": False},
+        {"audit_id": "A0002", "candidate_a_is_ours": True, "candidate_b_is_ours": False},
+    ]
+
+    resolved, mapping_report = resolve_pairwise_preferences(rows, mapping_rows)
+    report = build_agreement_report(resolved)
+
+    assert mapping_report["mapped_count"] == 2
+    assert mapping_report["tie_count"] == 1
+    assert report["preference"]["n"] == 3
+    assert report["preference"]["ours_win_rate"] == pytest.approx(1 / 3)
+    assert report["preference"]["candidate_a_rate"] == pytest.approx(1 / 3)
+    assert report["preference"]["candidate_b_rate"] == pytest.approx(1 / 3)
 
 
 def test_human_agreement_report_requires_core_annotation_columns():

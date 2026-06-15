@@ -43,17 +43,77 @@ def spearman_correlation(values_a: list[Any], values_b: list[Any]) -> dict[str, 
 
 
 def preference_win_rate(rows: list[dict[str, Any]], ours_label: str = "ours") -> dict[str, Any]:
-    labels = [str(row.get("human_preference_ab") or row.get("human_preference", "")).lower() for row in rows]
+    labels = [
+        str(
+            row.get("human_preference_resolved")
+            or row.get("human_preference")
+            or row.get("human_preference_ab")
+            or ""
+        ).lower()
+        for row in rows
+    ]
     valid = [label for label in labels if label in {ours_label, "baseline", "tie", "a", "b"}]
+    ab_labels = [str(row.get("human_preference_ab") or "").lower() for row in rows]
+    valid_ab = [label for label in ab_labels if label in {"a", "b", "tie"}]
     if not valid:
         return {"n": 0, "ours_win_rate": None, "candidate_a_rate": None, "candidate_b_rate": None, "tie_rate": None}
     return {
         "n": len(valid),
         "ours_win_rate": sum(label == ours_label for label in valid) / len(valid),
-        "candidate_a_rate": sum(label == "a" for label in valid) / len(valid),
-        "candidate_b_rate": sum(label == "b" for label in valid) / len(valid),
+        "candidate_a_rate": sum(label == "a" for label in valid_ab) / len(valid_ab) if valid_ab else None,
+        "candidate_b_rate": sum(label == "b" for label in valid_ab) / len(valid_ab) if valid_ab else None,
         "tie_rate": sum(label == "tie" for label in valid) / len(valid),
     }
+
+
+def resolve_pairwise_preferences(
+    rows: list[dict[str, Any]],
+    mapping_rows: list[dict[str, Any]] | None,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Resolve blind A/B preference labels into ours/baseline labels."""
+    mapping_rows = mapping_rows or []
+    by_audit_id = {str(row.get("audit_id")): row for row in mapping_rows if row.get("audit_id") not in (None, "")}
+    by_sample = {
+        (str(row.get("dataset")), str(row.get("sample_id"))): row
+        for row in mapping_rows
+        if row.get("dataset") not in (None, "") and row.get("sample_id") not in (None, "")
+    }
+    resolved_rows: list[dict[str, Any]] = []
+    summary: dict[str, Any] = {
+        "present": bool(mapping_rows),
+        "mapping_rows": len(mapping_rows),
+        "ab_label_count": 0,
+        "mapped_count": 0,
+        "tie_count": 0,
+        "unresolved_count": 0,
+        "unresolved_ids": [],
+    }
+    for row in rows:
+        item = dict(row)
+        label = str(item.get("human_preference_ab") or "").strip().lower()
+        if label in {"a", "b", "tie"}:
+            summary["ab_label_count"] += 1
+        if label == "tie":
+            item["human_preference_resolved"] = "tie"
+            summary["tie_count"] += 1
+            resolved_rows.append(item)
+            continue
+        if label in {"a", "b"}:
+            mapping = by_audit_id.get(str(item.get("audit_id"))) or by_sample.get(
+                (str(item.get("dataset")), str(item.get("sample_id")))
+            )
+            if not mapping:
+                summary["unresolved_count"] += 1
+                summary["unresolved_ids"].append(item.get("audit_id") or item.get("sample_id"))
+                resolved_rows.append(item)
+                continue
+            is_ours = _truthy(mapping.get(f"candidate_{label}_is_ours"))
+            item["human_preference_resolved"] = "ours" if is_ours else "baseline"
+            item["human_preference_resolved_from"] = "human_preference_ab"
+            item["human_preference_mapping_audit_id"] = mapping.get("audit_id")
+            summary["mapped_count"] += 1
+        resolved_rows.append(item)
+    return resolved_rows, summary
 
 
 def build_agreement_report(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -94,10 +154,15 @@ def formal_gate_failures(
         failures.append("too_few_leakage_pairs")
     if preference_n < min_preferences:
         failures.append("too_few_preferences")
+    mapping = report.get("preference_mapping")
+    if isinstance(mapping, dict) and _metric_n(mapping.get("unresolved_count")) > 0:
+        failures.append("unresolved_pairwise_preference_mapping")
     return failures
 
 
 def _metric_n(value: Any) -> int:
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
     if not isinstance(value, dict):
         return 0
     n = value.get("n")
@@ -107,6 +172,12 @@ def _metric_n(value: Any) -> int:
         return int(n)
     except (TypeError, ValueError):
         return 0
+
+
+def _truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "y"}
 
 
 def _ranks(values: list[float]) -> list[float]:
