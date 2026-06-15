@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import sys
 from pathlib import Path
 
 
@@ -85,6 +86,25 @@ def test_finalize_dry_run_writes_planned_manifest(tmp_path: Path) -> None:
         "human_audit_sample",
         "paper_artifacts",
     ]
+    assert payload["step_log_dir"] == str(tmp_path / "out" / "logs" / "finalization")
+
+
+def test_finalize_run_command_preserves_stdout_stderr_logs(tmp_path: Path) -> None:
+    step = {
+        "name": "failing step",
+        "argv": [
+            sys.executable,
+            "-c",
+            "import sys; print('visible stdout'); print('visible stderr', file=sys.stderr); sys.exit(3)",
+        ],
+    }
+
+    result = finalize._run_command(step, dry_run=False, log_dir=tmp_path / "finalization_logs")
+
+    assert result["status"] == "failed"
+    assert result["returncode"] == 3
+    assert Path(result["stdout_log"]).read_text(encoding="utf-8").strip() == "visible stdout"
+    assert Path(result["stderr_log"]).read_text(encoding="utf-8").strip() == "visible stderr"
 
 
 def test_finalize_only_adds_judge_when_requested(tmp_path: Path) -> None:

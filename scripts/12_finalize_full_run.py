@@ -150,16 +150,34 @@ def build_commands(args: argparse.Namespace) -> list[dict[str, Any]]:
     return commands
 
 
-def _run_command(step: dict[str, Any], dry_run: bool) -> dict[str, Any]:
+def _step_log_paths(log_dir: Path, step_name: str) -> dict[str, Path]:
+    safe_name = "".join(char if char.isalnum() or char in {"_", "-"} else "_" for char in step_name)
+    return {
+        "stdout": log_dir / f"{safe_name}.stdout.log",
+        "stderr": log_dir / f"{safe_name}.stderr.log",
+    }
+
+
+def _run_command(step: dict[str, Any], dry_run: bool, log_dir: str | Path | None = None) -> dict[str, Any]:
     started = datetime.now(timezone.utc).isoformat()
     if dry_run:
         return {"name": step["name"], "argv": step["argv"], "status": "planned", "started_at_utc": started}
-    completed = subprocess.run(step["argv"], check=False)
+    logs: dict[str, Path] | None = None
+    if log_dir is not None:
+        log_path = Path(log_dir)
+        log_path.mkdir(parents=True, exist_ok=True)
+        logs = _step_log_paths(log_path, str(step["name"]))
+        with logs["stdout"].open("w", encoding="utf-8") as stdout, logs["stderr"].open("w", encoding="utf-8") as stderr:
+            completed = subprocess.run(step["argv"], check=False, stdout=stdout, stderr=stderr)
+    else:
+        completed = subprocess.run(step["argv"], check=False)
     return {
         "name": step["name"],
         "argv": step["argv"],
         "status": "completed" if completed.returncode == 0 else "failed",
         "returncode": completed.returncode,
+        "stdout_log": str(logs["stdout"]) if logs else None,
+        "stderr_log": str(logs["stderr"]) if logs else None,
         "started_at_utc": started,
         "finished_at_utc": datetime.now(timezone.utc).isoformat(),
     }
@@ -178,13 +196,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--allow-incomplete", action="store_true", help="Allow smoke finalization before all shards complete.")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--manifest", default="outputs/full_run/finalization_manifest.json")
+    parser.add_argument("--step-log-dir", help="Directory for per-step stdout/stderr logs. Defaults to <output-dir>/logs/finalization.")
     args = parser.parse_args(argv)
 
     summary = _status_summary(args.plan)
     _require_complete(summary, args.allow_incomplete)
     completion = _completion_summary(summary)
     commands = build_commands(args)
-    steps = [_run_command(step, args.dry_run) for step in commands]
+    step_log_dir = args.step_log_dir or str(Path(args.output_dir) / "logs" / "finalization")
+    steps = [_run_command(step, args.dry_run, step_log_dir) for step in commands]
     status = "planned" if args.dry_run else ("completed" if all(step["status"] == "completed" for step in steps) else "failed")
     manifest = {
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -195,6 +215,7 @@ def main(argv: list[str] | None = None) -> int:
         "allow_unlabeled_agreement": args.allow_unlabeled_agreement,
         "shard_status": summary,
         **completion,
+        "step_log_dir": step_log_dir,
         "steps": steps,
     }
     output = Path(args.manifest)
