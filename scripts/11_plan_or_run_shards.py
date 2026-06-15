@@ -360,7 +360,7 @@ def _parse_timestamp(value: str | None) -> datetime | None:
         return None
 
 
-def _health_summary(summary: dict[str, Any], rate_rows_per_minute: float | None) -> dict[str, Any]:
+def _health_summary(summary: dict[str, Any], rate_rows_per_minute: float | None, target_running: int | None = None) -> dict[str, Any]:
     issues = []
     recommendations = []
     by_status = summary.get("by_status", {})
@@ -375,6 +375,10 @@ def _health_summary(summary: dict[str, Any], rate_rows_per_minute: float | None)
     if bad_statuses:
         issues.append("non_terminal_bad_status")
         recommendations.append("inspect stale/partial/invalid jobs before launching more shards")
+    running = int(by_status.get("running") or 0)
+    if target_running is not None and running > target_running:
+        issues.append("running_above_target")
+        recommendations.append("wait for running jobs to finish before calling maintain again")
     if rate_rows_per_minute == 0:
         issues.append("no_recent_progress")
         recommendations.append("check vLLM health, GPU utilization, and running shard stdout logs")
@@ -388,6 +392,7 @@ def _health_summary(summary: dict[str, Any], rate_rows_per_minute: float | None)
         "issues": issues,
         "recommendations": recommendations,
         "bad_statuses": bad_statuses,
+        "target_running": target_running,
     }
 
 
@@ -418,6 +423,11 @@ def progress_report(plan: dict[str, Any], *, supervisor_log: str | Path | None =
                 eta_hours = (remaining / rate_rows_per_minute) / 60 if rate_rows_per_minute else None
             elif elapsed_minutes > 0 and row_delta == 0:
                 rate_rows_per_minute = 0.0
+    target_running = None
+    if events:
+        target = events[-1].get("maintain", {}).get("target_running")
+        if target is not None:
+            target_running = int(target)
     return {
         **summary,
         "completion_fraction": completion_fraction,
@@ -426,7 +436,7 @@ def progress_report(plan: dict[str, Any], *, supervisor_log: str | Path | None =
         "rate_window_events": len(events),
         "recent_rows_per_minute": rate_rows_per_minute,
         "eta_hours": eta_hours,
-        "health": _health_summary(summary, rate_rows_per_minute),
+        "health": _health_summary(summary, rate_rows_per_minute, target_running=target_running),
     }
 
 

@@ -354,3 +354,45 @@ def test_progress_report_marks_generation_errors_unhealthy(tmp_path: Path) -> No
     assert report["health"]["status"] == "error"
     assert "generation_errors_present" in report["health"]["issues"]
     assert "completed_with_failures" in report["health"]["bad_statuses"]
+
+
+def test_progress_report_warns_when_running_above_target(tmp_path: Path) -> None:
+    plan = {
+        "output_dir": str(tmp_path / "out"),
+        "jobs": [],
+    }
+    for index in range(3):
+        generation_path = tmp_path / f"running{index}.jsonl"
+        pid_path = tmp_path / f"running{index}.pid"
+        _write_jsonl(generation_path, [{"sample_id": f"a{index}"}])
+        pid_path.write_text(str(os.getpid()), encoding="utf-8")
+        plan["jobs"].append(
+            {
+                "job_id": f"running{index}",
+                "experiment": "exp0",
+                "shard_index": index,
+                "num_shards": 3,
+                "estimated_records": 2,
+                "paths": {
+                    "generations": str(generation_path),
+                    "errors": str(tmp_path / f"running{index}_errors.jsonl"),
+                    "manifest": str(tmp_path / f"running{index}_manifest.json"),
+                    "pid": str(pid_path),
+                },
+            }
+        )
+    log = tmp_path / "supervisor.jsonl"
+    _write_jsonl(
+        log,
+        [
+            {"timestamp_utc": "2026-06-15T00:00:00+00:00", "maintain": {"target_running": 2}, "status": {"generation_rows": 1}},
+            {"timestamp_utc": "2026-06-15T00:05:00+00:00", "maintain": {"target_running": 2}, "status": {"generation_rows": 3}},
+        ],
+    )
+
+    report = shard_planner.progress_report(plan, supervisor_log=log)
+
+    assert report["by_status"]["running"] == 3
+    assert report["health"]["status"] == "warn"
+    assert "running_above_target" in report["health"]["issues"]
+    assert report["health"]["target_running"] == 2
