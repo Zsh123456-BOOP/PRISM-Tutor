@@ -90,3 +90,19 @@ def test_human_agreement_report():
     assert report["preference"]["n"] == 4
     assert cohen_kappa(["a"], ["a"])["kappa"] == 1.0
     assert spearman_correlation([1, 2], [2, 3])["spearman"] == 1.0
+
+
+def test_human_agreement_report_requires_core_annotation_columns():
+    report = build_agreement_report(
+        [
+            {
+                "sample_id": "s1",
+                "annotator_id": "a",
+                "human_quality_score": "4",
+            }
+        ]
+    )
+
+    assert "schema_error" in report
+    assert "human_leakage_label" in report["schema_error"]
+    assert "human_preference" in report["schema_error"]

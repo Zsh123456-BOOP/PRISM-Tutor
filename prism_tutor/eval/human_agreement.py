@@ -6,6 +6,14 @@ from collections import Counter
 from math import sqrt
 from typing import Any
 
+CORE_HUMAN_AGREEMENT_COLUMNS = {
+    "sample_id",
+    "annotator_id",
+    "human_quality_score",
+    "human_leakage_label",
+    "human_preference",
+}
+
 
 def cohen_kappa(labels_a: list[Any], labels_b: list[Any]) -> dict[str, Any]:
     pairs = [(a, b) for a, b in zip(labels_a, labels_b) if a not in (None, "") and b not in (None, "")]
@@ -47,8 +55,7 @@ def preference_win_rate(rows: list[dict[str, Any]], ours_label: str = "ours") ->
 
 
 def build_agreement_report(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    required = {"annotator_id", "sample_id"}
-    missing = required - set(rows[0]) if rows else required
+    missing = CORE_HUMAN_AGREEMENT_COLUMNS - set(rows[0]) if rows else CORE_HUMAN_AGREEMENT_COLUMNS
     if missing:
         return {"schema_error": f"missing columns: {sorted(missing)}"}
     by_sample: dict[Any, list[dict[str, Any]]] = {}

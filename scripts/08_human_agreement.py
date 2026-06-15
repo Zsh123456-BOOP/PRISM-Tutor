@@ -33,6 +33,8 @@ def main(argv: list[str] | None = None) -> int:
     report = build_agreement_report(rows)
     write_json(args.output, report)
     print(json.dumps({"rows": len(rows), "output": args.output}, indent=2))
+    if report.get("schema_error") and not args.allow_unlabeled:
+        return 1
     return 0
 
 

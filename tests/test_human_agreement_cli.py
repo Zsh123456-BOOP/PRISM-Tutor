@@ -43,3 +43,48 @@ def test_human_agreement_allow_unlabeled_uses_input_directory_blind_csv(tmp_path
     report = json.loads(output.read_text(encoding="utf-8"))
     assert rc == 0
     assert report["leakage_kappa"]["n"] == 1
+
+
+def test_human_agreement_cli_returns_nonzero_for_missing_core_columns(tmp_path: Path) -> None:
+    audit_dir = tmp_path / "outputs" / "full_run" / "human_audit"
+    audit_dir.mkdir(parents=True)
+    labeled = audit_dir / "human_audit_labeled.csv"
+    labeled.write_text(
+        "\n".join(
+            [
+                "sample_id,annotator_id,human_quality_score",
+                "s1,a,4",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    output = audit_dir / "human_agreement_report.json"
+
+    rc = human_agreement_script.main(["--input", str(labeled), "--output", str(output)])
+    report = json.loads(output.read_text(encoding="utf-8"))
+
+    assert rc == 1
+    assert "schema_error" in report
+
+
+def test_human_agreement_cli_allow_unlabeled_writes_schema_error_without_failing(tmp_path: Path) -> None:
+    audit_dir = tmp_path / "outputs" / "full_run" / "human_audit"
+    audit_dir.mkdir(parents=True)
+    blind = audit_dir / "human_audit_blind.csv"
+    blind.write_text("sample_id,annotator_id\ns1,a\n", encoding="utf-8")
+    output = audit_dir / "human_agreement_report.json"
+
+    rc = human_agreement_script.main(
+        [
+            "--input",
+            str(audit_dir / "human_audit_labeled.csv"),
+            "--output",
+            str(output),
+            "--allow-unlabeled",
+        ]
+    )
+    report = json.loads(output.read_text(encoding="utf-8"))
+
+    assert rc == 0
+    assert "schema_error" in report
