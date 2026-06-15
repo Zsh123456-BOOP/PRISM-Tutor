@@ -34,6 +34,18 @@ class JudgeScore:
         return asdict(self)
 
 
+def _parse_bool(value: Any, field: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "yes", "1"}:
+            return True
+        if normalized in {"false", "no", "0"}:
+            return False
+    raise ValueError(f"{field} must be boolean")
+
+
 def validate_score(payload: dict[str, Any]) -> JudgeScore:
     missing = [field for field in SCORE_FIELDS + ["reason"] if field not in payload]
     if missing:
@@ -41,10 +53,10 @@ def validate_score(payload: dict[str, Any]) -> JudgeScore:
     values: dict[str, Any] = {}
     for field in SCORE_FIELDS:
         if field == "answer_leakage":
-            values[field] = bool(payload[field])
+            values[field] = _parse_bool(payload[field], field)
             continue
         value = payload[field]
-        if not isinstance(value, (int, float)):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise ValueError(f"{field} must be numeric")
         if not 0.0 <= float(value) <= 5.0:
             raise ValueError(f"{field} must be in [0, 5]")

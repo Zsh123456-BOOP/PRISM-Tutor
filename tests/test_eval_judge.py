@@ -65,6 +65,35 @@ def test_parse_score_json_and_merge_leakage():
     assert merged["leakage_conflict"] is True
 
 
+def test_judge_schema_parses_boolean_strings_without_truthiness_bug():
+    parsed = parse_score_json(
+        '{"mathematical_correctness": 4, "pedagogical_quality": 3, '
+        '"scaffolding_quality": 2, "misconception_coverage": 1, '
+        '"answer_leakage": "false", "clarity": 5, '
+        '"student_facing_appropriateness": 4, "overall": 3, "reason": "ok"}'
+    )
+
+    assert parsed.answer_leakage is False
+
+
+def test_judge_schema_rejects_invalid_bool_and_bool_numeric_scores():
+    with pytest.raises(ValueError, match="answer_leakage must be boolean"):
+        parse_score_json(
+            '{"mathematical_correctness": 4, "pedagogical_quality": 3, '
+            '"scaffolding_quality": 2, "misconception_coverage": 1, '
+            '"answer_leakage": "maybe", "clarity": 5, '
+            '"student_facing_appropriateness": 4, "overall": 3, "reason": "ok"}'
+        )
+
+    with pytest.raises(ValueError, match="mathematical_correctness must be numeric"):
+        parse_score_json(
+            '{"mathematical_correctness": true, "pedagogical_quality": 3, '
+            '"scaffolding_quality": 2, "misconception_coverage": 1, '
+            '"answer_leakage": false, "clarity": 5, '
+            '"student_facing_appropriateness": 4, "overall": 3, "reason": "ok"}'
+        )
+
+
 def test_real_judge_request_uses_json_response_format(monkeypatch):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
     monkeypatch.setenv("PRISM_TUTOR_ENABLE_REAL_JUDGE", "1")
