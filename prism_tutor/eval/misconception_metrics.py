@@ -51,15 +51,25 @@ def precision_recall_f1(predicted: Any, gold: Any) -> dict[str, Any]:
 
 def evaluate_misconceptions(record: dict[str, Any], gold: dict[str, Any]) -> dict[str, Any]:
     parsed = record.get("parsed_output") if isinstance(record.get("parsed_output"), dict) else {}
+    state = record.get("state") if isinstance(record.get("state"), dict) else {}
+    agent_outputs = state.get("agent_outputs") if isinstance(state.get("agent_outputs"), dict) else {}
+    misconception_outputs = agent_outputs.get("misconception") if isinstance(agent_outputs.get("misconception"), list) else []
+    predicted_from_agent: list[str] = []
+    for output in misconception_outputs:
+        if isinstance(output, dict):
+            predicted_from_agent.extend(_as_set(output.get("misconception_labels")))
     predicted = (
         parsed.get("misconceptions")
+        or parsed.get("misconception_labels")
         or record.get("predicted_misconceptions")
         or record.get("misconceptions")
+        or predicted_from_agent
     )
     expected = (
         gold.get("misconceptions")
         or gold.get("gold_misconceptions")
         or gold.get("misconception_labels")
+        or gold.get("misconception_label")
     )
     result = precision_recall_f1(predicted, expected)
     return {f"misconception_{key}": value for key, value in result.items()}

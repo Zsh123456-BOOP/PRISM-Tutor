@@ -29,7 +29,14 @@ def evaluate_internal_correctness(record: dict[str, Any], gold: dict[str, Any]) 
     )
     if candidate is None:
         candidate = record.get("final_answer") or record.get("final_response")
-    gold_answer = gold.get("answer") or gold.get("ground_truth") or gold.get("final_answer")
+    metadata = gold.get("metadata") if isinstance(gold.get("metadata"), dict) else {}
+    gold_answer = (
+        gold.get("answer")
+        or gold.get("ground_truth")
+        or gold.get("final_answer")
+        or metadata.get("ground_truth")
+        or metadata.get("correct_answer")
+    )
     match = exact_or_normalized_match(candidate, gold_answer)
     if match is None:
         return {
