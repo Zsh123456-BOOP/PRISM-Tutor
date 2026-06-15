@@ -16,6 +16,7 @@ def _formal_judge_metadata(**overrides):
         "parsed_count": 1,
         "error_count": 0,
         "output_rows": 1,
+        "raw_response_count": 1,
     }
     payload.update(overrides)
     return payload
@@ -154,6 +155,7 @@ def test_reproducibility_checklist_rejects_mock_or_failed_judge_metadata(tmp_pat
                 parsed_count=9,
                 error_count=1,
                 output_rows=10,
+                raw_response_count=8,
             )
         ),
         encoding="utf-8",
@@ -174,6 +176,7 @@ def test_reproducibility_checklist_rejects_mock_or_failed_judge_metadata(tmp_pat
         "mock_actual_model",
         "judge_errors_present",
         "parsed_count_mismatch",
+        "raw_response_count_mismatch",
     ]
 
 

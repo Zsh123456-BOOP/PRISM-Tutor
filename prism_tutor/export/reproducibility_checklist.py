@@ -25,6 +25,7 @@ REQUIRED_JUDGE_METADATA_FIELDS = [
     "parsed_count",
     "error_count",
     "output_rows",
+    "raw_response_count",
 ]
 
 
@@ -183,6 +184,7 @@ def _judge_checks(judge_metadata: dict[str, Any] | None, required_paths: list[st
     error_count = _as_int(judge_metadata.get("error_count"))
     parsed_count = _as_int(judge_metadata.get("parsed_count"))
     output_rows = _as_int(judge_metadata.get("output_rows"))
+    raw_response_count = _as_int(judge_metadata.get("raw_response_count"))
     invalid_reasons = []
     if dry_run is True:
         invalid_reasons.append("dry_run_true")
@@ -192,6 +194,8 @@ def _judge_checks(judge_metadata: dict[str, Any] | None, required_paths: list[st
         invalid_reasons.append("judge_errors_present")
     if parsed_count is not None and output_rows is not None and parsed_count != output_rows:
         invalid_reasons.append("parsed_count_mismatch")
+    if raw_response_count is not None and output_rows is not None and raw_response_count != output_rows:
+        invalid_reasons.append("raw_response_count_mismatch")
     return [
         {
             "name": "judge_metadata_schema",
