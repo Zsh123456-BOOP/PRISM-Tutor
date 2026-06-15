@@ -19,6 +19,7 @@ def default_required_paths(artifact_prefix: str = DEFAULT_ARTIFACT_PREFIX) -> li
     return [
         f"{prefix}/logs",
         f"{prefix}/generations",
+        f"{prefix}/judge_scores/raw/judge_raw.jsonl",
         f"{prefix}/judge_scores/judge_metadata.json",
         f"{prefix}/metrics",
         f"{prefix}/tables",

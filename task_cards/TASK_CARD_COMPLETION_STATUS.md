@@ -21,12 +21,12 @@
 - [x] 13 实验矩阵：`configs/experiments.yaml` 与 `scripts/run_exp*.sh`。
 - [x] 14 统计、表格和图：`scripts/05_make_tables.py`、`scripts/06_make_figures.py`。
 - [x] 15 Human audit：`scripts/07_sample_human_audit.py`、`scripts/08_human_agreement.py`；blind audit CSV 不包含 method/selected agents/risk 字段，最终展示顺序由 seed 全局随机化，并在 sampling manifest 记录 display order seed 与 sample id 顺序。
-- [x] 16 Paper artifacts：`scripts/09_export_paper_artifacts.py`；paper artifact summary 会在 missing experiments 或 checklist failure 时标记 final artifact status failed，避免 incomplete artifacts 显示为 passed；formal finalization 会拒绝 generation error rows，并在后处理步骤失败时 fail-fast 而不是继续生成后续 artifact。
+- [x] 16 Paper artifacts：`scripts/09_export_paper_artifacts.py`；paper artifact summary 会在 missing experiments 或 checklist failure 时标记 final artifact status failed，避免 incomplete artifacts 显示为 passed；formal finalization 会拒绝 generation error rows，并在后处理步骤失败时 fail-fast 而不是继续生成后续 artifact；reproducibility checklist 会要求 judge raw response 和完整 judge metadata，并递归扫描 required artifact 目录中的明文 secret。
 
 ## 已验证命令
 
 - [x] 本机 `python -m compileall prism_tutor scripts data serving tests`
-- [x] 本机 `python -m pytest -q`，结果：143 passed。
+- [x] 本机 `python -m pytest -q`，结果：145 passed。
 - [x] 服务器 `python -m pytest -q`，结果：143 passed。
 - [x] `python scripts/00_prepare_env_check.py --config configs/default.yaml --dry-run`
 - [x] 服务器 env check dry-run：`CUDA_VISIBLE_DEVICES=2,3 python scripts/00_prepare_env_check.py --config configs/default.yaml --output /tmp/prism_env_check_latest.json --dry-run`，结果 `status=ok`，检测到 4 张 GPU，CUDA_VISIBLE_DEVICES 与配置一致。

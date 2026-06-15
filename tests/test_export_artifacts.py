@@ -19,6 +19,18 @@ def test_reproducibility_checklist_marks_missing_and_secret_hits(tmp_path):
     assert any(check.get("hits") for check in checklist["checks"] if check["name"] == "plaintext_secret_scan")
 
 
+def test_reproducibility_checklist_scans_required_directories_for_secrets(tmp_path):
+    generations = tmp_path / "outputs" / "full_run" / "generations"
+    generations.mkdir(parents=True)
+    (generations / "rows.jsonl").write_text('{"authorization": "bearer sk-test"}\n', encoding="utf-8")
+
+    checklist = build_reproducibility_checklist(tmp_path, ["outputs/full_run/generations"])
+    secret_check = next(check for check in checklist["checks"] if check["name"] == "plaintext_secret_scan")
+
+    assert checklist["status"] == "failed"
+    assert secret_check["hits"] == [{"path": "outputs/full_run/generations/rows.jsonl", "pattern": "bearer "}]
+
+
 def test_reproducibility_checklist_records_config_judge_gpu_and_paths(tmp_path):
     (tmp_path / "configs").mkdir()
     (tmp_path / "outputs" / "full_run" / "judge_scores").mkdir(parents=True)
@@ -36,7 +48,16 @@ def test_reproducibility_checklist_records_config_judge_gpu_and_paths(tmp_path):
         encoding="utf-8",
     )
     (tmp_path / "outputs" / "full_run" / "judge_scores" / "judge_metadata.json").write_text(
-        '{"actual_model": "deepseek-v4-pro"}',
+        json.dumps(
+            {
+                "actual_model": "deepseek-v4-pro",
+                "api_date": "2026-06-16",
+                "temperature": 0.0,
+                "top_p": 1.0,
+                "max_tokens": 768,
+                "prompt_version": "judge-v1",
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -57,6 +78,68 @@ def test_reproducibility_checklist_records_config_judge_gpu_and_paths(tmp_path):
     assert "## GPU" in markdown
     assert "Seed: `42`" in markdown
     assert "Metadata present: `True`" in markdown
+
+
+def test_reproducibility_checklist_requires_judge_metadata_schema_and_raw_responses(tmp_path):
+    (tmp_path / "configs").mkdir()
+    (tmp_path / "configs" / "default.yaml").write_text(
+        "\n".join(
+            [
+                "seed: 42",
+                "model:",
+                "  generator: Qwen/Qwen3-8B",
+                "  enable_thinking: false",
+                "  quantization: null",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    judge_dir = tmp_path / "outputs" / "full_run" / "judge_scores"
+    judge_dir.mkdir(parents=True)
+    (judge_dir / "judge_metadata.json").write_text("{}", encoding="utf-8")
+
+    failed = build_reproducibility_checklist(
+        tmp_path,
+        [
+            "outputs/full_run/judge_scores/judge_metadata.json",
+            "outputs/full_run/judge_scores/raw/judge_raw.jsonl",
+        ],
+    )
+    schema_check = next(check for check in failed["checks"] if check["name"] == "judge_metadata_schema")
+
+    assert failed["status"] == "failed"
+    assert "actual_model" in schema_check["missing_fields"]
+    assert any(
+        check["name"] == "outputs/full_run/judge_scores/raw/judge_raw.jsonl" and check["status"] == "failed"
+        for check in failed["checks"]
+    )
+
+    raw_dir = judge_dir / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "judge_raw.jsonl").write_text('{"raw_response": "{}"}\n', encoding="utf-8")
+    (judge_dir / "judge_metadata.json").write_text(
+        json.dumps(
+            {
+                "actual_model": "deepseek-v4-pro",
+                "api_date": "2026-06-16",
+                "temperature": 0.0,
+                "top_p": 1.0,
+                "max_tokens": 768,
+                "prompt_version": "judge-v1",
+            }
+        ),
+        encoding="utf-8",
+    )
+    passed = build_reproducibility_checklist(
+        tmp_path,
+        [
+            "outputs/full_run/judge_scores/judge_metadata.json",
+            "outputs/full_run/judge_scores/raw/judge_raw.jsonl",
+        ],
+    )
+
+    assert next(check for check in passed["checks"] if check["name"] == "judge_metadata_schema")["status"] == "passed"
+    assert all(check["status"] == "passed" for check in passed["checks"] if check["name"].startswith("outputs/full_run/judge_scores"))
 
 
 def test_export_paper_artifacts_writes_index_summary_and_manifest(tmp_path):

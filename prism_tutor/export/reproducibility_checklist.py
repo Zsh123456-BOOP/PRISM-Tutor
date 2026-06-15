@@ -14,6 +14,14 @@ from prism_tutor.utils.reproducibility import package_versions
 
 SECRET_PATTERNS = ["api_key", "apikey", "secret", "password", "bearer "]
 DEFAULT_CONFIG_PATH = "configs/default.yaml"
+REQUIRED_JUDGE_METADATA_FIELDS = [
+    "actual_model",
+    "api_date",
+    "temperature",
+    "top_p",
+    "max_tokens",
+    "prompt_version",
+]
 
 
 def build_reproducibility_checklist(
@@ -38,6 +46,7 @@ def build_reproducibility_checklist(
     versions = {"python": sys.version.split()[0], **package_versions()}
     gpu_summary = run_nvidia_smi()
     judge_metadata = _load_optional_json(root_path / _judge_metadata_path(required_paths))
+    checks.extend(_judge_checks(judge_metadata, required_paths))
     secret_scan = scan_for_plaintext_secrets(root_path, required_paths)
     checks.append({"name": "plaintext_secret_scan", "status": "failed" if secret_scan else "passed", "hits": secret_scan})
 
@@ -158,6 +167,21 @@ def _config_checks(config: dict[str, Any]) -> list[dict[str, Any]]:
     return checks
 
 
+def _judge_checks(judge_metadata: dict[str, Any] | None, required_paths: list[str]) -> list[dict[str, Any]]:
+    if not any("judge_scores" in rel or rel.endswith("judge_metadata.json") for rel in required_paths):
+        return []
+    if judge_metadata is None:
+        return [{"name": "judge_metadata_schema", "status": "failed", "missing_fields": REQUIRED_JUDGE_METADATA_FIELDS}]
+    missing = [field for field in REQUIRED_JUDGE_METADATA_FIELDS if judge_metadata.get(field) in (None, "")]
+    return [
+        {
+            "name": "judge_metadata_schema",
+            "status": "failed" if missing else "passed",
+            "missing_fields": missing,
+        }
+    ]
+
+
 def _path_summary(root: Path, rel_paths: list[str]) -> list[dict[str, Any]]:
     summary = []
     for rel in rel_paths:
@@ -187,13 +211,27 @@ def scan_for_plaintext_secrets(root: Path, rel_paths: list[str]) -> list[dict[st
     hits = []
     for rel in rel_paths:
         path = root / rel
-        if not path.exists() or not path.is_file() or path.stat().st_size > 1_000_000:
-            continue
-        text = path.read_text(encoding="utf-8", errors="ignore").lower()
-        for pattern in SECRET_PATTERNS:
-            if pattern in text:
-                hits.append({"path": rel, "pattern": pattern})
+        for file_path in _iter_secret_scan_files(path):
+            text = file_path.read_text(encoding="utf-8", errors="ignore").lower()
+            rel_file = str(file_path.relative_to(root))
+            for pattern in SECRET_PATTERNS:
+                if pattern in text:
+                    hits.append({"path": rel_file, "pattern": pattern})
     return hits
+
+
+def _iter_secret_scan_files(path: Path) -> list[Path]:
+    if not path.exists():
+        return []
+    if path.is_file():
+        return [path] if path.stat().st_size <= 1_000_000 else []
+    if not path.is_dir():
+        return []
+    files: list[Path] = []
+    for child in sorted(path.rglob("*")):
+        if child.is_file() and child.stat().st_size <= 1_000_000:
+            files.append(child)
+    return files
 
 
 def _run(cmd: list[str], cwd: Path) -> str | None:
