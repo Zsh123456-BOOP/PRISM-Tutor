@@ -110,50 +110,60 @@ class BaseLLMClient:
         usage = LLMUsage(source="mock")
         error: LLMError | None = None
         usage_missing = False
+        request_warnings: list[str] = []
 
-        try:
-            if self.config.mock_mode or endpoint_url.startswith("mock://"):
-                raw_completion = self._mock_completion(agent_name, schema)
-                usage = self._estimate_usage(messages, raw_completion, source="mock")
-            else:
-                response = self._post_chat_completion(endpoint, payload)
-                served_model_name = str(response.get("model") or payload_model)
-                if "qwen3-8b" not in served_model_name.lower():
-                    raise ValueError(f"served model is not Qwen3-8B: {served_model_name}")
-                choices = response.get("choices") or []
-                raw_completion = str(choices[0]["message"]["content"]) if choices else ""
-                if not raw_completion:
-                    error = LLMError(code="empty_response", message="model returned empty completion")
-                usage_payload = response.get("usage")
-                if usage_payload:
-                    usage = LLMUsage(
-                        prompt_tokens=int(usage_payload.get("prompt_tokens", 0)),
-                        completion_tokens=int(usage_payload.get("completion_tokens", 0)),
-                        total_tokens=int(usage_payload.get("total_tokens", 0)),
-                        source="api",
-                    )
+        for attempt in range(self.config.retries + 1):
+            error = None
+            try:
+                if self.config.mock_mode or endpoint_url.startswith("mock://"):
+                    raw_completion = self._mock_completion(agent_name, schema)
+                    usage = self._estimate_usage(messages, raw_completion, source="mock")
                 else:
-                    usage_missing = True
-                    usage = self._estimate_usage(messages, raw_completion, source="estimated")
-        except urllib.error.URLError as exc:
-            error = LLMError(code="http_error", message=str(exc), retryable=True)
-        except TimeoutError as exc:
-            error = LLMError(code="timeout", message=str(exc), retryable=True)
-        except ValueError as exc:
-            error = LLMError(code="model_mismatch", message=str(exc), retryable=False)
-        except Exception as exc:  # pragma: no cover - defensive boundary
-            error = LLMError(code="client_error", message=str(exc), retryable=False)
+                    response = self._post_chat_completion(endpoint, payload)
+                    served_model_name = str(response.get("model") or payload_model)
+                    if "qwen3-8b" not in served_model_name.lower():
+                        raise ValueError(f"served model is not Qwen3-8B: {served_model_name}")
+                    choices = response.get("choices") or []
+                    raw_completion = str(choices[0]["message"]["content"]) if choices else ""
+                    if not raw_completion:
+                        error = LLMError(code="empty_response", message="model returned empty completion")
+                    usage_payload = response.get("usage")
+                    if usage_payload:
+                        usage = LLMUsage(
+                            prompt_tokens=int(usage_payload.get("prompt_tokens", 0)),
+                            completion_tokens=int(usage_payload.get("completion_tokens", 0)),
+                            total_tokens=int(usage_payload.get("total_tokens", 0)),
+                            source="api",
+                        )
+                    else:
+                        usage_missing = True
+                        usage = self._estimate_usage(messages, raw_completion, source="estimated")
+                break
+            except urllib.error.URLError as exc:
+                error = LLMError(code="http_error", message=str(exc), retryable=True)
+            except TimeoutError as exc:
+                error = LLMError(code="timeout", message=str(exc), retryable=True)
+            except ValueError as exc:
+                error = LLMError(code="model_mismatch", message=str(exc), retryable=False)
+                break
+            except Exception as exc:  # pragma: no cover - defensive boundary
+                error = LLMError(code="client_error", message=str(exc), retryable=False)
+                break
+            if error and error.retryable and attempt < self.config.retries:
+                request_warnings.append(f"retry_after_{error.code}")
+                continue
+            break
 
         parse_success = False
         parsed_output: dict[str, Any] | None = None
         stripped_output = ""
-        warnings: list[str] = []
+        warnings: list[str] = list(request_warnings)
         if schema and raw_completion:
             parse_result = parse_agent_json(raw_completion, schema)
             parse_success = parse_result.parse_success
             parsed_output = parse_result.parsed_output
             stripped_output = parse_result.stripped_output
-            warnings = parse_result.warnings
+            warnings.extend(parse_result.warnings)
             if not parse_success and error is None:
                 error = LLMError(code="parse_error", message=parse_result.error or "parse failed")
         elif raw_completion:

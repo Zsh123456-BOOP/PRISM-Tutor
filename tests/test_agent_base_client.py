@@ -1,4 +1,5 @@
 import json
+import urllib.error
 
 from prism_tutor.agents.base_client import BaseLLMClient, LLMClientConfig, LLMEndpointConfig
 from prism_tutor.agents.schemas import SolverOutput
@@ -84,3 +85,54 @@ def test_v1_endpoint_url_is_not_double_prefixed(monkeypatch):
     )
     assert captured["url"] == "http://localhost:8000/v1/chat/completions"
     assert captured["timeout"] == 7
+
+
+def test_client_retries_retryable_http_errors(monkeypatch):
+    attempts = {"count": 0}
+
+    def fake_post(self, endpoint, payload):
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            raise urllib.error.URLError("temporary")
+        return {
+            "model": "qwen3-8b-gpu0",
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "answer": "2",
+                                "reasoning": ["1+1"],
+                                "confidence": 0.9,
+                                "uncertainty": 0.1,
+                                "needs_more_info": False,
+                            }
+                        )
+                    }
+                }
+            ],
+            "usage": {"prompt_tokens": 3, "completion_tokens": 4, "total_tokens": 7},
+        }
+
+    monkeypatch.setattr(BaseLLMClient, "_post_chat_completion", fake_post)
+    client = BaseLLMClient(
+        LLMClientConfig(
+            endpoints=[LLMEndpointConfig(base_url="http://localhost:8000/v1", model="qwen3-8b-gpu0")],
+            mock_mode=False,
+            retries=1,
+        )
+    )
+
+    record = client.call(
+        sample_id="s1",
+        method="B0",
+        agent_name="solver",
+        messages=[{"role": "user", "content": "solve"}],
+        schema=SolverOutput,
+    )
+
+    assert attempts["count"] == 2
+    assert record.parse_success is True
+    assert record.error is None
+    assert "retry_after_http_error" in record.warnings
+    assert record.usage.total_tokens == 7
