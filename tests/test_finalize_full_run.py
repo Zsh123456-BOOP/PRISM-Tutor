@@ -160,6 +160,7 @@ def test_finalize_only_adds_judge_when_requested(tmp_path: Path) -> None:
         output_dir=str(tmp_path / "out"),
         gold="data/splits",
         run_judge=True,
+        allow_mock_judge=False,
         run_human_agreement=False,
         allow_unlabeled_agreement=False,
         judge_config="configs/judge.yaml",
@@ -167,12 +168,32 @@ def test_finalize_only_adds_judge_when_requested(tmp_path: Path) -> None:
     )
 
     commands = finalize.build_commands(args)
+    judge_command = next(command for command in commands if command["name"] == "llm_judge")
     metrics_command = next(command for command in commands if command["name"] == "auto_metrics")
 
     assert [command["name"] for command in commands][:2] == ["llm_judge", "auto_metrics"]
+    assert "--require-real" in judge_command["argv"]
     assert metrics_command["argv"][metrics_command["argv"].index("--judge-scores") + 1] == str(
         tmp_path / "out" / "judge_scores" / "judge_scores.jsonl"
     )
+
+
+def test_finalize_can_allow_mock_judge_for_smoke(tmp_path: Path) -> None:
+    args = finalize.argparse.Namespace(
+        output_dir=str(tmp_path / "out"),
+        gold="data/splits",
+        run_judge=True,
+        allow_mock_judge=True,
+        run_human_agreement=False,
+        allow_unlabeled_agreement=False,
+        judge_config="configs/judge.yaml",
+        audit_n=200,
+    )
+
+    commands = finalize.build_commands(args)
+    judge_command = next(command for command in commands if command["name"] == "llm_judge")
+
+    assert "--require-real" not in judge_command["argv"]
 
 
 def test_finalize_paper_artifacts_uses_full_run_prefix(tmp_path: Path) -> None:
@@ -182,6 +203,7 @@ def test_finalize_paper_artifacts_uses_full_run_prefix(tmp_path: Path) -> None:
         output_dir=str(tmp_path / "out"),
         gold="data/splits",
         run_judge=False,
+        allow_mock_judge=False,
         run_human_agreement=False,
         allow_unlabeled_agreement=False,
         judge_config="configs/judge.yaml",
@@ -202,6 +224,7 @@ def test_finalize_human_audit_uses_full_run_prerequisite_paths(tmp_path: Path) -
         output_dir=str(tmp_path / "out"),
         gold="data/splits",
         run_judge=True,
+        allow_mock_judge=False,
         run_human_agreement=False,
         allow_unlabeled_agreement=False,
         judge_config="configs/judge.yaml",
@@ -225,6 +248,7 @@ def test_finalize_can_insert_human_agreement_before_paper_artifacts(tmp_path: Pa
         output_dir=str(tmp_path / "out"),
         gold="data/splits",
         run_judge=False,
+        allow_mock_judge=False,
         run_human_agreement=True,
         allow_unlabeled_agreement=True,
         judge_config="configs/judge.yaml",

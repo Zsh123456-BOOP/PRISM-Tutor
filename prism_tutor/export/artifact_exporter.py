@@ -16,14 +16,34 @@ DEFAULT_ARTIFACT_PREFIX = "outputs"
 
 def default_required_paths(artifact_prefix: str = DEFAULT_ARTIFACT_PREFIX) -> list[str]:
     prefix = artifact_prefix.rstrip("/")
+    table_stems = [
+        "table1_main_results",
+        "table2_routing",
+        "table3_budget",
+        "table4_state_commit",
+        "table5_ablation",
+        "table6_robustness",
+    ]
+    figure_files = [
+        "figure1_system_overview.pdf",
+        "figure2_quality_token_pareto.pdf",
+        "figure3_risk_bucket_analysis.pdf",
+        "figure4_agent_call_distribution.pdf",
+        "figure5_state_conflict_case_study.pdf",
+        "figure_manifest.json",
+    ]
     return [
         f"{prefix}/logs",
         f"{prefix}/generations",
         f"{prefix}/judge_scores/raw/judge_raw.jsonl",
         f"{prefix}/judge_scores/judge_metadata.json",
         f"{prefix}/metrics",
+        f"{prefix}/metrics/record_auto_metrics.jsonl",
+        f"{prefix}/metrics/significance_tests.json",
         f"{prefix}/tables",
+        *[f"{prefix}/tables/{stem}.{ext}" for stem in table_stems for ext in ("csv", "tex")],
         f"{prefix}/figures",
+        *[f"{prefix}/figures/{name}" for name in figure_files],
         f"{prefix}/human_audit/human_agreement_report.json",
     ]
 
@@ -48,11 +68,13 @@ def export_paper_artifacts(
     files = {
         "experiment_manifest": out / "experiment_manifest.json",
         "reproducibility_checklist": out / "reproducibility_checklist.md",
+        "reproducibility_checklist_json": out / "reproducibility_checklist.json",
         "artifact_index": out / "artifact_index.md",
         "experiment_summary": out / "experiment_summary.md",
     }
     files["experiment_manifest"].write_text(json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     files["reproducibility_checklist"].write_text(checklist_to_markdown(checklist), encoding="utf-8")
+    files["reproducibility_checklist_json"].write_text(json.dumps(checklist, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     files["artifact_index"].write_text(index, encoding="utf-8")
     files["experiment_summary"].write_text(summary, encoding="utf-8")
     return files
@@ -155,9 +177,7 @@ def build_artifact_index(root: Path, artifact_prefix: str = DEFAULT_ARTIFACT_PRE
 
 
 def build_experiment_summary(manifest: dict[str, Any], checklist: dict[str, Any], artifact_index: str) -> str:
-    final_status = "passed"
-    if manifest.get("artifact_status") != "passed" or checklist.get("status") != "passed":
-        final_status = "failed"
+    final_status = final_artifact_status(manifest, checklist)
     lines = [
         "# Experiment Summary",
         "",
@@ -173,3 +193,9 @@ def build_experiment_summary(manifest: dict[str, Any], checklist: dict[str, Any]
         artifact_index,
     ]
     return "\n".join(lines)
+
+
+def final_artifact_status(manifest: dict[str, Any], checklist: dict[str, Any]) -> str:
+    if manifest.get("artifact_status") != "passed" or checklist.get("status") != "passed":
+        return "failed"
+    return "passed"

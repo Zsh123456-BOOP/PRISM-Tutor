@@ -137,11 +137,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output_dir", default="outputs/judge_scores")
     parser.add_argument("--limit", type=int)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--require-real",
+        action="store_true",
+        help="Fail if judge_config would use the mock/dry-run judge. Use for formal full-run finalization.",
+    )
     args = parser.parse_args(argv)
 
     cfg = load_yaml(args.judge_config) if Path(args.judge_config).exists() else {}
     dry_run = bool(cfg.get("dry_run", True))
     provider = "mock" if dry_run else str(cfg.get("provider", "deepseek"))
+    if args.require_real and (dry_run or provider == "mock"):
+        raise SystemExit("Formal judge requires dry_run=false and a non-mock provider")
     client = make_judge_client(
         JudgeClientConfig(
             provider=provider,

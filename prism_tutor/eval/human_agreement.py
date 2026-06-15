@@ -73,6 +73,40 @@ def build_agreement_report(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def formal_gate_failures(
+    report: dict[str, Any],
+    *,
+    min_quality_pairs: int = 2,
+    min_leakage_pairs: int = 1,
+    min_preferences: int = 1,
+) -> list[str]:
+    if report.get("schema_error"):
+        return ["schema_error"]
+    failures = []
+    quality_n = _metric_n(report.get("quality_spearman"))
+    leakage_n = _metric_n(report.get("leakage_kappa"))
+    preference_n = _metric_n(report.get("preference"))
+    if quality_n < min_quality_pairs:
+        failures.append("too_few_quality_pairs")
+    if leakage_n < min_leakage_pairs:
+        failures.append("too_few_leakage_pairs")
+    if preference_n < min_preferences:
+        failures.append("too_few_preferences")
+    return failures
+
+
+def _metric_n(value: Any) -> int:
+    if not isinstance(value, dict):
+        return 0
+    n = value.get("n")
+    if isinstance(n, bool):
+        return 0
+    try:
+        return int(n)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _ranks(values: list[float]) -> list[float]:
     sorted_values = sorted((value, idx) for idx, value in enumerate(values))
     ranks = [0.0] * len(values)

@@ -21,6 +21,10 @@ REQUIRED_JUDGE_METADATA_FIELDS = [
     "top_p",
     "max_tokens",
     "prompt_version",
+    "dry_run",
+    "parsed_count",
+    "error_count",
+    "output_rows",
 ]
 
 
@@ -47,6 +51,7 @@ def build_reproducibility_checklist(
     gpu_summary = run_nvidia_smi()
     judge_metadata = _load_optional_json(root_path / _judge_metadata_path(required_paths))
     checks.extend(_judge_checks(judge_metadata, required_paths))
+    checks.extend(_content_checks(root_path, required_paths))
     secret_scan = scan_for_plaintext_secrets(root_path, required_paths)
     checks.append({"name": "plaintext_secret_scan", "status": "failed" if secret_scan else "passed", "hits": secret_scan})
 
@@ -173,13 +178,39 @@ def _judge_checks(judge_metadata: dict[str, Any] | None, required_paths: list[st
     if judge_metadata is None:
         return [{"name": "judge_metadata_schema", "status": "failed", "missing_fields": REQUIRED_JUDGE_METADATA_FIELDS}]
     missing = [field for field in REQUIRED_JUDGE_METADATA_FIELDS if judge_metadata.get(field) in (None, "")]
+    dry_run = judge_metadata.get("dry_run")
+    actual_model = str(judge_metadata.get("actual_model") or "")
+    error_count = _as_int(judge_metadata.get("error_count"))
+    parsed_count = _as_int(judge_metadata.get("parsed_count"))
+    output_rows = _as_int(judge_metadata.get("output_rows"))
+    invalid_reasons = []
+    if dry_run is True:
+        invalid_reasons.append("dry_run_true")
+    if actual_model == "mock-judge" or actual_model.startswith("mock"):
+        invalid_reasons.append("mock_actual_model")
+    if error_count is not None and error_count != 0:
+        invalid_reasons.append("judge_errors_present")
+    if parsed_count is not None and output_rows is not None and parsed_count != output_rows:
+        invalid_reasons.append("parsed_count_mismatch")
     return [
         {
             "name": "judge_metadata_schema",
-            "status": "failed" if missing else "passed",
+            "status": "failed" if missing or invalid_reasons else "passed",
             "missing_fields": missing,
+            "invalid_reasons": invalid_reasons,
         }
     ]
+
+
+def _as_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _path_summary(root: Path, rel_paths: list[str]) -> list[dict[str, Any]]:
@@ -189,6 +220,60 @@ def _path_summary(root: Path, rel_paths: list[str]) -> list[dict[str, Any]]:
         kind = "directory" if path.is_dir() else "file" if path.is_file() else "missing"
         summary.append({"path": rel, "status": "passed" if path.exists() else "failed", "kind": kind})
     return summary
+
+
+def _content_checks(root: Path, rel_paths: list[str]) -> list[dict[str, Any]]:
+    checks = []
+    for rel in rel_paths:
+        path = root / rel
+        if not path.exists() or not path.is_file():
+            continue
+        if rel.endswith("figure_manifest.json"):
+            payload = _load_optional_json(path) or {}
+            checks.append(
+                {
+                    "name": f"{rel}:content",
+                    "status": "passed" if payload.get("status") == "completed" else "failed",
+                    "expected_status": "completed",
+                    "actual_status": payload.get("status"),
+                }
+            )
+        elif rel.endswith("human_agreement_report.json"):
+            payload = _load_optional_json(path) or {}
+            checks.append(
+                {
+                    "name": f"{rel}:content",
+                    "status": "passed" if payload.get("status") == "passed" else "failed",
+                    "expected_status": "passed",
+                    "actual_status": payload.get("status"),
+                }
+            )
+        elif rel.endswith(".csv") and "/tables/" in rel:
+            rows = _count_csv_rows(path)
+            checks.append({"name": f"{rel}:content", "status": "passed" if rows > 0 else "failed", "rows": rows})
+        elif rel.endswith("record_auto_metrics.jsonl") or rel.endswith("judge_raw.jsonl"):
+            rows = _count_jsonl_rows(path)
+            checks.append({"name": f"{rel}:content", "status": "passed" if rows > 0 else "failed", "rows": rows})
+        elif rel.endswith("significance_tests.json"):
+            payload = _load_optional_json(path)
+            rows = len(payload) if isinstance(payload, list) else 0
+            checks.append({"name": f"{rel}:content", "status": "passed" if rows > 0 else "failed", "rows": rows})
+    return checks
+
+
+def _count_csv_rows(path: Path) -> int:
+    try:
+        lines = [line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    except OSError:
+        return 0
+    return max(len(lines) - 1, 0)
+
+
+def _count_jsonl_rows(path: Path) -> int:
+    try:
+        return sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
+    except OSError:
+        return 0
 
 
 def _judge_metadata_path(required_paths: list[str]) -> str:

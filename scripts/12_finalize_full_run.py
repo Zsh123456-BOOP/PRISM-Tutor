@@ -96,10 +96,21 @@ def build_commands(args: argparse.Namespace) -> list[dict[str, Any]]:
     logs = str(Path(args.output_dir) / "logs")
     commands = []
     if args.run_judge:
+        judge_argv = _cmd(
+            "scripts/03_run_judge.py",
+            "--input",
+            generations,
+            "--judge_config",
+            args.judge_config,
+            "--output_dir",
+            str(Path(args.output_dir) / "judge_scores"),
+        )
+        if not getattr(args, "allow_mock_judge", False):
+            judge_argv.append("--require-real")
         commands.append(
             {
                 "name": "llm_judge",
-                "argv": _cmd("scripts/03_run_judge.py", "--input", generations, "--judge_config", args.judge_config, "--output_dir", str(Path(args.output_dir) / "judge_scores")),
+                "argv": judge_argv,
             }
         )
     commands.append(
@@ -235,6 +246,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--judge-config", default="configs/judge.yaml")
     parser.add_argument("--audit-n", type=int, default=200)
     parser.add_argument("--run-judge", action="store_true", help="Run the configured judge. This may call an external API.")
+    parser.add_argument("--allow-mock-judge", action="store_true", help="Allow mock/dry-run judge in finalization. Use only for smoke checks.")
     parser.add_argument("--run-human-agreement", action="store_true", help="Compute agreement after labeled human audit CSV exists.")
     parser.add_argument("--allow-unlabeled-agreement", action="store_true", help="Allow agreement smoke from blind CSV when labels are not filled.")
     parser.add_argument("--allow-incomplete", action="store_true", help="Allow smoke finalization before all shards complete.")
@@ -256,6 +268,7 @@ def main(argv: list[str] | None = None) -> int:
         "status": status,
         "allow_incomplete": args.allow_incomplete,
         "run_judge": args.run_judge,
+        "allow_mock_judge": args.allow_mock_judge,
         "run_human_agreement": args.run_human_agreement,
         "allow_unlabeled_agreement": args.allow_unlabeled_agreement,
         "shard_status": summary,

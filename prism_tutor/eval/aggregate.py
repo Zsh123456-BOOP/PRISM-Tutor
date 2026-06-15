@@ -38,6 +38,12 @@ def _build_judge_index(judge_rows: list[dict[str, Any]] | None) -> dict[tuple[st
     return index
 
 
+def _valid_judge_row(judge_row: dict[str, Any] | None) -> bool:
+    if not isinstance(judge_row, dict):
+        return False
+    return isinstance(judge_row.get("parsed_score"), dict) and not judge_row.get("error")
+
+
 def compute_record_metrics(
     record: dict[str, Any],
     gold: dict[str, Any] | None = None,
@@ -96,7 +102,7 @@ def compute_record_metrics(
         "leakage_matched_rules": "|".join(leakage["matched_rules"]),
         "leakage_hit_count": len(leakage["hits"]),
     }
-    if judge_row is not None:
+    if _valid_judge_row(judge_row):
         merged = merge_leakage(output, judge_row)
         output.update(
             {
@@ -104,15 +110,20 @@ def compute_record_metrics(
                 "final_leakage": merged["final_leakage"],
                 "leakage_conflict": merged["leakage_conflict"],
                 "judge_leakage_coverage": 1.0,
+                "judge_error": None,
+                "judge_parse_success": True,
             }
         )
     else:
+        judge_error = judge_row.get("error") if isinstance(judge_row, dict) else None
         output.update(
             {
                 "judge_leakage": None,
                 "final_leakage": output["rule_leakage"],
                 "leakage_conflict": None,
                 "judge_leakage_coverage": 0.0,
+                "judge_error": judge_error or ("missing_parsed_score" if judge_row is not None else None),
+                "judge_parse_success": False if judge_row is not None else None,
             }
         )
     return output
@@ -155,6 +166,7 @@ def compute_auto_metrics(
         "gold_count": len(gold_index),
         "judge_count": len(judge_rows or []),
         "judge_matched_count": sum(row.get("judge_leakage_coverage") == 1.0 for row in record_metrics),
+        "judge_invalid_count": sum(row.get("judge_parse_success") is False for row in record_metrics),
         "parse_failure_count": sum(not bool(row.get("parse_success")) for row in record_metrics),
         "orphan_generation_count": len(orphan_generations),
         "missing_sample_count": len(missing_samples),

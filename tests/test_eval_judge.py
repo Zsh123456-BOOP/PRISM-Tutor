@@ -48,6 +48,23 @@ def test_real_judge_requires_explicit_env(monkeypatch):
         make_judge_client(JudgeClientConfig(provider="deepseek"))
 
 
+def test_run_judge_require_real_rejects_dry_run_config(tmp_path):
+    config = tmp_path / "judge.yaml"
+    config.write_text(
+        "\n".join(
+            [
+                "provider: deepseek",
+                "requested_model: deepseek-v4-pro",
+                "dry_run: true",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SystemExit, match="Formal judge requires"):
+        run_judge.main(["--judge_config", str(config), "--require-real", "--input", str(tmp_path / "missing.jsonl")])
+
+
 def test_parse_score_json_and_merge_leakage():
     parsed = parse_score_json(
         '{"mathematical_correctness": 4, "pedagogical_quality": 3, '

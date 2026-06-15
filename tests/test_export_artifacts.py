@@ -1,7 +1,24 @@
 import json
 
-from prism_tutor.export.artifact_exporter import export_paper_artifacts
+from prism_tutor.export.artifact_exporter import default_required_paths, export_paper_artifacts
 from prism_tutor.export.reproducibility_checklist import build_reproducibility_checklist, checklist_to_markdown
+
+
+def _formal_judge_metadata(**overrides):
+    payload = {
+        "actual_model": "deepseek-v4-pro",
+        "api_date": "2026-06-16",
+        "temperature": 0.0,
+        "top_p": 1.0,
+        "max_tokens": 768,
+        "prompt_version": "judge-v1",
+        "dry_run": False,
+        "parsed_count": 1,
+        "error_count": 0,
+        "output_rows": 1,
+    }
+    payload.update(overrides)
+    return payload
 
 
 def test_reproducibility_checklist_marks_missing_and_secret_hits(tmp_path):
@@ -48,16 +65,7 @@ def test_reproducibility_checklist_records_config_judge_gpu_and_paths(tmp_path):
         encoding="utf-8",
     )
     (tmp_path / "outputs" / "full_run" / "judge_scores" / "judge_metadata.json").write_text(
-        json.dumps(
-            {
-                "actual_model": "deepseek-v4-pro",
-                "api_date": "2026-06-16",
-                "temperature": 0.0,
-                "top_p": 1.0,
-                "max_tokens": 768,
-                "prompt_version": "judge-v1",
-            }
-        ),
+        json.dumps(_formal_judge_metadata()),
         encoding="utf-8",
     )
 
@@ -118,16 +126,7 @@ def test_reproducibility_checklist_requires_judge_metadata_schema_and_raw_respon
     raw_dir.mkdir()
     (raw_dir / "judge_raw.jsonl").write_text('{"raw_response": "{}"}\n', encoding="utf-8")
     (judge_dir / "judge_metadata.json").write_text(
-        json.dumps(
-            {
-                "actual_model": "deepseek-v4-pro",
-                "api_date": "2026-06-16",
-                "temperature": 0.0,
-                "top_p": 1.0,
-                "max_tokens": 768,
-                "prompt_version": "judge-v1",
-            }
-        ),
+        json.dumps(_formal_judge_metadata()),
         encoding="utf-8",
     )
     passed = build_reproducibility_checklist(
@@ -140,6 +139,42 @@ def test_reproducibility_checklist_requires_judge_metadata_schema_and_raw_respon
 
     assert next(check for check in passed["checks"] if check["name"] == "judge_metadata_schema")["status"] == "passed"
     assert all(check["status"] == "passed" for check in passed["checks"] if check["name"].startswith("outputs/full_run/judge_scores"))
+
+
+def test_reproducibility_checklist_rejects_mock_or_failed_judge_metadata(tmp_path):
+    judge_dir = tmp_path / "outputs" / "full_run" / "judge_scores"
+    raw_dir = judge_dir / "raw"
+    raw_dir.mkdir(parents=True)
+    (raw_dir / "judge_raw.jsonl").write_text('{"raw_response": "{}"}\n', encoding="utf-8")
+    (judge_dir / "judge_metadata.json").write_text(
+        json.dumps(
+            _formal_judge_metadata(
+                actual_model="mock-judge",
+                dry_run=True,
+                parsed_count=9,
+                error_count=1,
+                output_rows=10,
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    checklist = build_reproducibility_checklist(
+        tmp_path,
+        [
+            "outputs/full_run/judge_scores/judge_metadata.json",
+            "outputs/full_run/judge_scores/raw/judge_raw.jsonl",
+        ],
+    )
+    schema_check = next(check for check in checklist["checks"] if check["name"] == "judge_metadata_schema")
+
+    assert checklist["status"] == "failed"
+    assert schema_check["invalid_reasons"] == [
+        "dry_run_true",
+        "mock_actual_model",
+        "judge_errors_present",
+        "parsed_count_mismatch",
+    ]
 
 
 def test_export_paper_artifacts_writes_index_summary_and_manifest(tmp_path):
@@ -179,6 +214,58 @@ def test_export_paper_artifacts_uses_run_local_artifact_prefix(tmp_path):
     artifact_index = files["artifact_index"].read_text(encoding="utf-8")
     assert "outputs/full_run/metrics: passed" in checklist
     assert "`outputs/full_run/metrics/significance_tests.json`" in artifact_index
+
+
+def test_default_paper_artifact_paths_require_concrete_tables_figures_and_metrics(tmp_path):
+    required = default_required_paths("outputs/full_run")
+    assert "outputs/full_run/metrics/record_auto_metrics.jsonl" in required
+    assert "outputs/full_run/metrics/significance_tests.json" in required
+    assert "outputs/full_run/tables/table1_main_results.csv" in required
+    assert "outputs/full_run/tables/table6_robustness.tex" in required
+    assert "outputs/full_run/figures/figure2_quality_token_pareto.pdf" in required
+    assert "outputs/full_run/figures/figure_manifest.json" in required
+
+    for rel in ["outputs/full_run/metrics", "outputs/full_run/tables", "outputs/full_run/figures"]:
+        (tmp_path / rel).mkdir(parents=True, exist_ok=True)
+
+    checklist = build_reproducibility_checklist(tmp_path, required)
+
+    assert checklist["status"] == "failed"
+    assert any(
+        check["name"] == "outputs/full_run/figures/figure_manifest.json" and check["status"] == "failed"
+        for check in checklist["checks"]
+    )
+    assert any(
+        check["name"] == "outputs/full_run/tables/table1_main_results.csv" and check["status"] == "failed"
+        for check in checklist["checks"]
+    )
+
+
+def test_checklist_fails_on_failed_artifact_content(tmp_path):
+    table = tmp_path / "outputs" / "full_run" / "tables" / "table1_main_results.csv"
+    figure_manifest = tmp_path / "outputs" / "full_run" / "figures" / "figure_manifest.json"
+    agreement = tmp_path / "outputs" / "full_run" / "human_audit" / "human_agreement_report.json"
+    table.parent.mkdir(parents=True)
+    figure_manifest.parent.mkdir(parents=True)
+    agreement.parent.mkdir(parents=True)
+    table.write_text("dataset,method,n\n", encoding="utf-8")
+    figure_manifest.write_text(json.dumps({"status": "failed"}), encoding="utf-8")
+    agreement.write_text(json.dumps({"status": "failed"}), encoding="utf-8")
+
+    checklist = build_reproducibility_checklist(
+        tmp_path,
+        [
+            "outputs/full_run/tables/table1_main_results.csv",
+            "outputs/full_run/figures/figure_manifest.json",
+            "outputs/full_run/human_audit/human_agreement_report.json",
+        ],
+    )
+
+    assert checklist["status"] == "failed"
+    checks = {check["name"]: check for check in checklist["checks"]}
+    assert checks["outputs/full_run/tables/table1_main_results.csv:content"]["status"] == "failed"
+    assert checks["outputs/full_run/figures/figure_manifest.json:content"]["actual_status"] == "failed"
+    assert checks["outputs/full_run/human_audit/human_agreement_report.json:content"]["actual_status"] == "failed"
 
 
 def test_export_paper_artifacts_populates_manifest_from_shard_plan(tmp_path):

@@ -88,3 +88,56 @@ def test_human_agreement_cli_allow_unlabeled_writes_schema_error_without_failing
 
     assert rc == 0
     assert "schema_error" in report
+
+
+def test_human_agreement_formal_fails_when_no_valid_labels(tmp_path: Path) -> None:
+    audit_dir = tmp_path / "outputs" / "full_run" / "human_audit"
+    audit_dir.mkdir(parents=True)
+    labeled = audit_dir / "human_audit_labeled.csv"
+    labeled.write_text(
+        "\n".join(
+            [
+                "sample_id,annotator_id,human_quality_score,human_leakage_label,human_preference",
+                "s1,a,,,",
+                "s1,b,,,",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    output = audit_dir / "human_agreement_report.json"
+
+    rc = human_agreement_script.main(["--input", str(labeled), "--output", str(output)])
+    report = json.loads(output.read_text(encoding="utf-8"))
+
+    assert rc == 1
+    assert report["status"] == "failed"
+    assert "too_few_quality_pairs" in report["formal_gate"]["failures"]
+    assert "too_few_leakage_pairs" in report["formal_gate"]["failures"]
+    assert "too_few_preferences" in report["formal_gate"]["failures"]
+
+
+def test_human_agreement_formal_fails_when_no_two_annotator_overlap(tmp_path: Path) -> None:
+    audit_dir = tmp_path / "outputs" / "full_run" / "human_audit"
+    audit_dir.mkdir(parents=True)
+    labeled = audit_dir / "human_audit_labeled.csv"
+    labeled.write_text(
+        "\n".join(
+            [
+                "sample_id,annotator_id,human_quality_score,human_leakage_label,human_preference",
+                "s1,a,4,no,ours",
+                "s2,a,5,no,tie",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    output = audit_dir / "human_agreement_report.json"
+
+    rc = human_agreement_script.main(["--input", str(labeled), "--output", str(output)])
+    report = json.loads(output.read_text(encoding="utf-8"))
+
+    assert rc == 1
+    assert report["status"] == "failed"
+    assert "too_few_quality_pairs" in report["formal_gate"]["failures"]
+    assert "too_few_leakage_pairs" in report["formal_gate"]["failures"]
