@@ -53,10 +53,10 @@
 - [x] 全量 shard plan：`outputs/full_run/shard_plan.json`，1792 个 job，estimated_records `204373`，初始状态 pending。
 - [x] Shard plan/status/launch 工具验证：`outputs/shard_tool_smoke`，Exp0 8-shard dry-run plan，`launch --next` 后 1 completed / 7 pending，15 generation rows，0 error rows。
 - [x] Shard concurrency maintainer：`python scripts/11_plan_or_run_shards.py maintain --plan outputs/full_run/shard_plan.json --target-running 2 --max-launches 2`，当前 running 已达目标时不会重复启动 job。
-- [x] Shard supervisor：`python scripts/11_plan_or_run_shards.py supervise --plan outputs/full_run/shard_plan.json --target-running 12 --interval-seconds 120 --log-path outputs/full_run/logs/shards/supervisor_compact.jsonl`，服务器 PID `2462564`。
+- [x] Shard supervisor：`python scripts/11_plan_or_run_shards.py supervise --plan outputs/full_run/shard_plan.json --target-running 14 --interval-seconds 120 --log-path outputs/full_run/logs/shards/supervisor_compact.jsonl`，服务器 PID `2464929`。
 - [x] Full-run finalization gate：`scripts/12_finalize_full_run.py --allow-incomplete --dry-run` 已在服务器真实 shard plan 上验证，默认不调用 judge，计划步骤为 auto metrics、tables、figures、human audit sample、paper artifacts。
 - [x] Shard progress report：`python scripts/11_plan_or_run_shards.py progress --plan outputs/full_run/shard_plan.json --supervisor-log outputs/full_run/logs/shards/supervisor_compact.jsonl --rate-window 5` 已在服务器验证。
-- [x] 正式 full_run 后台运行：已完成 9 个 shard，12 个 shard 正在 running；最近检查 generation_rows `1348`、error_rows `0`，近期吞吐约 `56.84` rows/min，粗略 ETA 约 `59.54` hours，GPU2/GPU3 均 100% utilization。
+- [x] 正式 full_run 后台运行：已完成 13 个 shard，14 个 shard 正在 running；最近检查 generation_rows `1688`、error_rows `0`，近期吞吐约 `66.11` rows/min，粗略 ETA 约 `51.10` hours，GPU2/GPU3 均 100% utilization。
 
 ## 仍需服务器真实执行的项目
 
@@ -68,7 +68,7 @@
 - [x] 用 live smoke raw logs 重新生成 smoke 版 tables、figures、paper artifacts。
 - [x] 提供全量正式实验前的分片执行能力与规模估算 gate。
 - [x] 提供全量正式实验的 shard manifest、status、launch 和 maintain 工具：`scripts/11_plan_or_run_shards.py`。
-- [ ] 使用真实 Qwen3-8B endpoint 跑完全量 Exp0-Exp6 generation。目前已完成 Exp0 前 9 个 shard，并由 supervisor 维持 12 个 shard 并发继续运行；尚未完成全量 1792 个 job。
+- [ ] 使用真实 Qwen3-8B endpoint 跑完全量 Exp0-Exp6 generation。目前已完成 Exp0 前 13 个 shard，并由 supervisor 维持 14 个 shard 并发继续运行；尚未完成全量 1792 个 job。
 - [ ] 全量实验完成后执行正式 200 条 blind human audit，并填入人工标签后计算 agreement。
 - [ ] 用全量真实 raw logs 重新生成正式论文 tables、figures、paper artifacts。
 
