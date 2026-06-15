@@ -196,7 +196,14 @@ def test_supervise_jobs_writes_cycle_log_and_stops_at_max_cycles(tmp_path: Path,
     monkeypatch.setattr(
         shard_planner,
         "status_report",
-        lambda plan: {"by_status": {"running": 1}, "generation_rows": 2, "error_rows": 0},
+        lambda plan: {
+            "job_count": 2,
+            "by_status": {"running": 1},
+            "generation_rows": 2,
+            "error_rows": 0,
+            "estimated_records": 4,
+            "jobs": [],
+        },
     )
 
     result = shard_planner.supervise_jobs(
@@ -221,7 +228,14 @@ def test_supervise_jobs_stops_when_all_jobs_completed(tmp_path: Path, monkeypatc
     monkeypatch.setattr(
         shard_planner,
         "status_report",
-        lambda plan: {"by_status": {"completed": 2}, "generation_rows": 4, "error_rows": 0},
+        lambda plan: {
+            "job_count": 2,
+            "by_status": {"completed": 2},
+            "generation_rows": 4,
+            "error_rows": 0,
+            "estimated_records": 4,
+            "jobs": [],
+        },
     )
 
     result = shard_planner.supervise_jobs(plan_path, target_running=2, interval_seconds=1)

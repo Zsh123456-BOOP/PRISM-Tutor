@@ -325,6 +325,16 @@ def _all_terminal(report: dict[str, Any]) -> bool:
     return set(report["by_status"]) <= {"completed"}
 
 
+def _compact_status(report: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "job_count": report["job_count"],
+        "by_status": report["by_status"],
+        "generation_rows": report["generation_rows"],
+        "error_rows": report["error_rows"],
+        "estimated_records": report["estimated_records"],
+    }
+
+
 def supervise_jobs(
     plan_path: str | Path,
     *,
@@ -343,15 +353,17 @@ def supervise_jobs(
     last_event: dict[str, Any] | None = None
     while True:
         cycles += 1
+        maintain_result = maintain_jobs(plan, target_running=target_running)
+        report = status_report(plan)
         event = {
             "timestamp_utc": datetime.now(timezone.utc).isoformat(),
             "cycle": cycles,
-            "maintain": maintain_jobs(plan, target_running=target_running),
-            "status": status_report(plan),
+            "maintain": maintain_result,
+            "status": _compact_status(report),
         }
         _append_jsonl(log_path, event)
         last_event = event
-        if _all_terminal(event["status"]):
+        if _all_terminal(report):
             break
         if max_cycles is not None and cycles >= max_cycles:
             break
