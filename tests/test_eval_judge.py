@@ -99,3 +99,54 @@ def test_real_judge_request_uses_json_response_format(monkeypatch):
     assert result["parsed_score"]["overall"] == 4.0
     assert result["raw_attempts"][0]["error"] is None
     assert "sk-test" not in str(result)
+
+
+def test_real_judge_retries_with_repair_instruction(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    monkeypatch.setenv("PRISM_TUTOR_ENABLE_REAL_JUDGE", "1")
+    bodies = []
+    responses = [
+        {"model": "deepseek-v4-pro", "choices": [{"message": {"content": '{"overall": 4,'}, "finish_reason": "length"}]},
+        {
+            "model": "deepseek-v4-pro",
+            "choices": [
+                {
+                    "message": {
+                        "content": (
+                            '{"mathematical_correctness": 4, "pedagogical_quality": 4, '
+                            '"scaffolding_quality": 4, "misconception_coverage": 4, '
+                            '"answer_leakage": false, "clarity": 4, '
+                            '"student_facing_appropriateness": 4, "overall": 4, "reason": "ok"}'
+                        )
+                    },
+                    "finish_reason": "stop",
+                }
+            ],
+        },
+    ]
+
+    class FakeResponse:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def read(self):
+            return json.dumps(self.payload).encode("utf-8")
+
+    def fake_urlopen(request, timeout):
+        bodies.append(json.loads(request.data.decode("utf-8")))
+        return FakeResponse(responses.pop(0))
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    client = make_judge_client(JudgeClientConfig(provider="deepseek", retries=1))
+    result = client.judge({"sample_id": "s1", "candidate_response": "Try again."})
+
+    assert result["parsed_score"]["overall"] == 4.0
+    assert len(result["raw_attempts"]) == 2
+    assert result["raw_attempts"][0]["error"] is not None
+    assert "previous response was invalid" in bodies[1]["messages"][-1]["content"].lower()

@@ -80,9 +80,16 @@ class DeepSeekJudgeClient(MockJudgeClient):
     def judge(self, case: dict[str, Any]) -> dict[str, Any]:
         started = time.time()
         prompt = build_judge_prompt(case)
+        messages = [
+            {
+                "role": "system",
+                "content": "Return one complete JSON object only. Do not include markdown, comments, or partial JSON.",
+            },
+            {"role": "user", "content": prompt},
+        ]
         body = {
             "model": self.config.requested_model,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": messages,
             "temperature": self.config.temperature,
             "top_p": self.config.top_p,
             "max_tokens": self.config.max_tokens,
@@ -107,14 +114,39 @@ class DeepSeekJudgeClient(MockJudgeClient):
                 with urllib.request.urlopen(request, timeout=self.config.timeout_s) as response:
                     payload = json.loads(response.read().decode("utf-8"))
                 actual_model = payload.get("model") or actual_model
-                raw_response = payload["choices"][0]["message"]["content"]
-                attempts.append({"attempt": attempt, "raw_response": raw_response, "error": None})
+                choice = (payload.get("choices") or [{}])[0]
+                raw_response = str(choice.get("message", {}).get("content") or "")
                 parsed_score = parse_score_json(raw_response).to_dict()
+                attempts.append(
+                    {
+                        "attempt": attempt,
+                        "raw_response": raw_response,
+                        "error": None,
+                        "finish_reason": choice.get("finish_reason"),
+                        "usage": payload.get("usage"),
+                    }
+                )
                 error = None
                 break
             except Exception as exc:  # pragma: no cover - network path is opt-in.
                 error = f"attempt={attempt}: {type(exc).__name__}: {exc}"
-                attempts.append({"attempt": attempt, "raw_response": raw_response, "error": error})
+                attempts.append(
+                    {
+                        "attempt": attempt,
+                        "raw_response": raw_response,
+                        "error": error,
+                    }
+                )
+                body["messages"] = messages + [
+                    {"role": "assistant", "content": raw_response or "{}"},
+                    {
+                        "role": "user",
+                        "content": (
+                            "The previous response was invalid or incomplete. "
+                            "Return exactly one complete JSON object with all required score fields."
+                        ),
+                    },
+                ]
         return {
             "sample_id": case.get("sample_id"),
             "dataset": case.get("dataset"),
