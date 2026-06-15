@@ -1,0 +1,31 @@
+report_path: outputs/logs/dataset_download_report.json
+
+datasets:
+  mathdial:
+    source_type: huggingface_files
+    repo_id: eth-nlped/mathdial
+    repo_type: dataset
+    files:
+      - train.jsonl
+      - test.jsonl
+    raw_path: data/raw/mathdial
+    license: cc-by-4.0
+    notes: Official MathDial dataset repository with train/test JSONL files.
+
+  bridge:
+    source_type: manual_required
+    raw_path: data/raw/bridge
+    expected_files: "*.jsonl, *.json, or *.csv"
+    notes: >
+      The project plan describes a 700-conversation Bridge tutoring dataset with
+      student error, remediation strategy, and teacher intention annotations, but
+      does not provide a verifiable public download URL or repository id.
+
+  misconception:
+    source_type: manual_required
+    raw_path: data/raw/misconception
+    expected_files: "*.jsonl, *.json, or *.csv"
+    notes: >
+      The project plan requires the 220-example, 55-class Math Misconception
+      Benchmark. Do not substitute larger unrelated misconception datasets
+      unless the experiment manifest explicitly labels them as substitute data.
