@@ -52,6 +52,7 @@
 - [x] Sharded runner live 验证：`outputs/shard_live_smoke`，Exp0 shard0 limit=1，15/15 success，metrics orphan_generation_count `0`。
 - [x] 全量 shard plan：`outputs/full_run/shard_plan.json`，1792 个 job，estimated_records `204373`，初始状态 pending。
 - [x] Shard plan/status/launch 工具验证：`outputs/shard_tool_smoke`，Exp0 8-shard dry-run plan，`launch --next` 后 1 completed / 7 pending，15 generation rows，0 error rows。
+- [x] 正式 full_run 后台启动：`exp0_problem_diagnosis_shard000-of-256` PID `2441201`、`exp0_problem_diagnosis_shard001-of-256` PID `2441202`，当前状态 running，约 80 秒检查时 generation_rows `23`、error_rows `0`。
 
 ## 仍需服务器真实执行的项目
 
