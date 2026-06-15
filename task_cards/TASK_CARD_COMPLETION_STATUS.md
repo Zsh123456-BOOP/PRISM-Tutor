@@ -27,7 +27,7 @@
 
 - [x] 本机 `python -m compileall prism_tutor scripts data serving tests`
 - [x] 本机 `python -m pytest -q`，结果：171 passed。
-- [x] 服务器 `python -m pytest -q`，结果：168 passed。
+- [x] 服务器 `python -m pytest -q`，结果：171 passed。
 - [x] `python scripts/00_prepare_env_check.py --config configs/default.yaml --dry-run`
 - [x] 服务器 env check dry-run：`CUDA_VISIBLE_DEVICES=2,3 python scripts/00_prepare_env_check.py --config configs/default.yaml --output /tmp/prism_env_check_latest.json --dry-run`，结果 `status=ok`，检测到 4 张 GPU，CUDA_VISIBLE_DEVICES 与配置一致。
 - [x] `python scripts/01_build_datasets.py --help`
@@ -66,7 +66,7 @@
 - [x] Table export coverage：`scripts/05_make_tables.py` 可自动生成 `table1_main_results` 至 `table6_robustness` 的 CSV/TeX，并写出 paired significance JSON。
 - [x] Exp5/Exp6 runtime variant coverage：Exp5 ablation 会真实禁用 risk estimator、QoS routing、budget controller、state commit 或对应风险项；Exp6 dry-run smoke 验证 `fixed_4/debate/generic_sparse/ours_full × noise{0.2,0.4} × budget{1000,2000,4000}` 展开为 24 个 method variants。
 - [x] Shard progress report：`python scripts/11_plan_or_run_shards.py progress --plan outputs/full_run/shard_plan.json --supervisor-log outputs/full_run/logs/shards/supervisor_compact.jsonl --rate-window 5` 已在服务器验证，health summary 当前为 `ok`，并记录 `target_running`。
-- [x] 正式 full_run 后台运行：已完成 195 个 shard，18 个 shard 正在 running；最近检查 generation_rows `17632`、error_rows `0`，estimated_records `294053`，completion_fraction `0.05996197964312556`；health summary 为 `ok`。
+- [x] 正式 full_run 后台运行：已完成 195 个 shard，18 个 shard 正在 running；最近检查 generation_rows `17705`、error_rows `0`，estimated_records `294053`，completion_fraction `0.06021023420947924`；health summary 为 `ok`。
 
 ## 仍需服务器真实执行的项目
 
