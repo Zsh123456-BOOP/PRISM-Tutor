@@ -58,6 +58,7 @@
 - [x] Shard concurrency maintainer：`python scripts/11_plan_or_run_shards.py maintain --plan outputs/full_run/shard_plan.json --target-running 2 --max-launches 2`，当前 running 已达目标时不会重复启动 job。
 - [x] Shard supervisor：`python scripts/11_plan_or_run_shards.py supervise --plan outputs/full_run/shard_plan.json --target-running 18 --interval-seconds 120 --log-path outputs/full_run/logs/shards/supervisor_compact.jsonl`，服务器 PID `2472200`。
 - [x] Full-run finalization gate：`scripts/12_finalize_full_run.py --allow-incomplete --dry-run` 已在服务器真实 shard plan 上验证，默认不调用 judge，计划步骤为 auto metrics、tables、figures、human audit sample、paper artifacts；manifest/stdout 会输出 `completed_jobs`、`total_jobs`、`can_finalize`、`planned_steps`。
+- [x] Full-run finalization latest dry-run：服务器真实 shard plan 当前 `156/1792` jobs completed，`can_finalize=false`，planned steps 仍为 auto metrics、tables、figures、human audit sample、paper artifacts，未调用 judge/API。
 - [x] Finalization step logs：`scripts/12_finalize_full_run.py` 非 dry-run 时会为每个后处理 step 保存 stdout/stderr，并在 manifest 记录日志路径。
 - [x] Paper artifact run-local path gate：`scripts/09_export_paper_artifacts.py --artifact-prefix outputs/full_run` 可让 reproducibility checklist 和 artifact index 检查 full-run 目录，而不是误查全局 `outputs/*`。
 - [x] Reproducibility checklist coverage：`scripts/09_export_paper_artifacts.py` 导出的 checklist 包含 seed、config、model、GPU、judge metadata、data/log paths、git 和 package versions。
