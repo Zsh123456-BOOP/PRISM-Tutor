@@ -10,6 +10,7 @@ import pytest
 from prism_tutor.experiments.runner import (
     RunnerOptions,
     _expand_method_specs,
+    _llm_client_from_config,
     _prism_graph_config_from_run_config,
     load_samples,
     run_generation,
@@ -86,6 +87,28 @@ def test_prism_graph_config_uses_default_yaml_and_ablation_variant() -> None:
     assert config.budget.max_rounds == 3
     assert config.budget.max_tokens == 4000
     assert config.disabled_risks == ["leakage_risk"]
+
+
+def test_llm_client_uses_default_yaml_endpoints_and_generation_config() -> None:
+    client = _llm_client_from_config(load_config())
+
+    assert client.config.mock_mode is False
+    assert client.config.model_name == "Qwen/Qwen3-8B"
+    assert client.config.temperature == 0.2
+    assert client.config.top_p == 0.8
+    assert client.config.top_k == 20
+    assert client.config.max_tokens == 768
+    assert client.config.timeout_s == 120
+    assert client.config.retries == 1
+    assert [endpoint.base_url for endpoint in client._endpoints] == [
+        "http://localhost:8000/v1",
+        "http://localhost:8001/v1",
+    ]
+    assert [endpoint.model for endpoint in client._endpoints] == ["qwen3-8b-gpu0", "qwen3-8b-gpu1"]
+
+    payload = client.build_payload([{"role": "user", "content": "hello"}], model_name=client._endpoints[0].model)
+    assert payload["model"] == "qwen3-8b-gpu0"
+    assert payload["chat_template_kwargs"]["enable_thinking"] is False
 
 
 def test_runner_writes_smoke_generation_jsonl_and_manifest(tmp_path: Path) -> None:
