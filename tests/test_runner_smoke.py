@@ -22,6 +22,7 @@ REQUIRED_FIELDS = {
     "messages",
     "state",
     "token_usage",
+    "agent_calls",
     "latency_seconds",
     "final_response",
     "parse_success",
