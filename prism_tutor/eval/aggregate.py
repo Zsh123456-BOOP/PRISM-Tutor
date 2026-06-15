@@ -7,6 +7,7 @@ from statistics import mean
 from typing import Any
 
 from .correctness import evaluate_internal_correctness
+from .judge_merge import merge_leakage
 from .leakage_detector import detect_leakage
 from .misconception_metrics import evaluate_misconceptions
 from .routing_metrics import evaluate_routing
@@ -18,7 +19,30 @@ def _key(row: dict[str, Any]) -> tuple[str, str]:
     return (str(row.get("dataset", "")), str(row.get("sample_id", "")))
 
 
-def compute_record_metrics(record: dict[str, Any], gold: dict[str, Any] | None = None) -> dict[str, Any]:
+def _method_key(row: dict[str, Any]) -> tuple[str, str, str]:
+    return (str(row.get("dataset", "")), str(row.get("sample_id", "")), str(row.get("method", "")))
+
+
+def _judge_for_record(record: dict[str, Any], judge_index: dict[tuple[str, ...], dict[str, Any]]) -> dict[str, Any] | None:
+    return judge_index.get(_method_key(record)) or judge_index.get(_key(record))
+
+
+def _build_judge_index(judge_rows: list[dict[str, Any]] | None) -> dict[tuple[str, ...], dict[str, Any]]:
+    index: dict[tuple[str, ...], dict[str, Any]] = {}
+    for row in judge_rows or []:
+        method_key = _method_key(row)
+        sample_key = _key(row)
+        if method_key[2]:
+            index[method_key] = row
+        index.setdefault(sample_key, row)
+    return index
+
+
+def compute_record_metrics(
+    record: dict[str, Any],
+    gold: dict[str, Any] | None = None,
+    judge_row: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     gold = gold or {}
     token_info = record_token_count(record)
     latency = record.get("latency") or record.get("latency_s") or record.get("elapsed_seconds")
@@ -72,14 +96,35 @@ def compute_record_metrics(record: dict[str, Any], gold: dict[str, Any] | None =
         "leakage_matched_rules": "|".join(leakage["matched_rules"]),
         "leakage_hit_count": len(leakage["hits"]),
     }
+    if judge_row is not None:
+        merged = merge_leakage(output, judge_row)
+        output.update(
+            {
+                "judge_leakage": merged["judge_leakage"],
+                "final_leakage": merged["final_leakage"],
+                "leakage_conflict": merged["leakage_conflict"],
+                "judge_leakage_coverage": 1.0,
+            }
+        )
+    else:
+        output.update(
+            {
+                "judge_leakage": None,
+                "final_leakage": output["rule_leakage"],
+                "leakage_conflict": None,
+                "judge_leakage_coverage": 0.0,
+            }
+        )
     return output
 
 
 def compute_auto_metrics(
     generation_rows: list[dict[str, Any]],
     gold_rows: list[dict[str, Any]] | None = None,
+    judge_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     gold_index = {_key(row): row for row in gold_rows or []}
+    judge_index = _build_judge_index(judge_rows)
     record_metrics: list[dict[str, Any]] = []
     orphan_generations: list[dict[str, Any]] = []
     seen_keys: set[tuple[str, str]] = set()
@@ -90,7 +135,7 @@ def compute_auto_metrics(
         gold = gold_index.get(key)
         if gold is None and gold_index:
             orphan_generations.append({"dataset": key[0], "sample_id": key[1], "method": record.get("method")})
-        record_metrics.append(compute_record_metrics(record, gold))
+        record_metrics.append(compute_record_metrics(record, gold, _judge_for_record(record, judge_index)))
 
     missing_samples = [
         {"dataset": dataset, "sample_id": sample_id}
@@ -108,6 +153,8 @@ def compute_auto_metrics(
     coverage = {
         "generation_count": len(generation_rows),
         "gold_count": len(gold_index),
+        "judge_count": len(judge_rows or []),
+        "judge_matched_count": sum(row.get("judge_leakage_coverage") == 1.0 for row in record_metrics),
         "parse_failure_count": sum(not bool(row.get("parse_success")) for row in record_metrics),
         "orphan_generation_count": len(orphan_generations),
         "missing_sample_count": len(missing_samples),
@@ -146,9 +193,13 @@ def _aggregate_group(dataset: str, method: str, rows: list[dict[str, Any]]) -> d
         "routing_f1_mean": _mean_present(rows, "routing_f1"),
         "state_conflict_rate_mean": _mean_present(rows, "state_conflict_rate"),
         "rule_leakage_rate": _mean_present(rows, "rule_leakage"),
+        "judge_leakage_rate": _mean_present(rows, "judge_leakage"),
+        "final_leakage_rate": _mean_present(rows, "final_leakage"),
+        "leakage_conflict_rate": _mean_present(rows, "leakage_conflict"),
         "internal_correctness_coverage": _coverage(rows, "internal_correctness"),
         "misconception_coverage": _coverage(rows, "misconception_f1"),
         "routing_coverage": _coverage(rows, "routing_f1"),
+        "judge_leakage_coverage": _mean_present(rows, "judge_leakage_coverage"),
     }
 
 

@@ -82,17 +82,13 @@ def _paper_artifact_argv(args: argparse.Namespace, paper_artifacts: str, logs: s
 def build_commands(args: argparse.Namespace) -> list[dict[str, Any]]:
     generations = str(Path(args.output_dir) / "generations")
     metrics = str(Path(args.output_dir) / "metrics")
+    judge_scores = str(Path(args.output_dir) / "judge_scores" / "judge_scores.jsonl")
     tables = str(Path(args.output_dir) / "tables")
     figures = str(Path(args.output_dir) / "figures")
     human_audit = str(Path(args.output_dir) / "human_audit")
     paper_artifacts = str(Path(args.output_dir) / "paper_artifacts")
     logs = str(Path(args.output_dir) / "logs")
-    commands = [
-        {
-            "name": "auto_metrics",
-            "argv": _cmd("scripts/04_compute_metrics.py", "--generations", generations, "--gold", args.gold, "--output_dir", metrics),
-        }
-    ]
+    commands = []
     if args.run_judge:
         commands.append(
             {
@@ -100,6 +96,22 @@ def build_commands(args: argparse.Namespace) -> list[dict[str, Any]]:
                 "argv": _cmd("scripts/03_run_judge.py", "--input", generations, "--judge_config", args.judge_config, "--output_dir", str(Path(args.output_dir) / "judge_scores")),
             }
         )
+    commands.append(
+        {
+            "name": "auto_metrics",
+            "argv": _cmd(
+                "scripts/04_compute_metrics.py",
+                "--generations",
+                generations,
+                "--gold",
+                args.gold,
+                "--judge-scores",
+                judge_scores,
+                "--output_dir",
+                metrics,
+            ),
+        }
+    )
     commands.extend(
         [
             {
@@ -119,7 +131,7 @@ def build_commands(args: argparse.Namespace) -> list[dict[str, Any]]:
                     "--generations",
                     generations,
                     "--judge-scores",
-                    str(Path(args.output_dir) / "judge_scores" / "judge_scores.jsonl"),
+                    judge_scores,
                     "--tables",
                     tables,
                     "--n",

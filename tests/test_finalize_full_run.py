@@ -115,7 +115,6 @@ def test_finalize_run_command_preserves_stdout_stderr_logs(tmp_path: Path) -> No
 
 
 def test_finalize_only_adds_judge_when_requested(tmp_path: Path) -> None:
-    plan = _write_plan(tmp_path, ["completed"])
     args = finalize.argparse.Namespace(
         output_dir=str(tmp_path / "out"),
         gold="data/splits",
@@ -127,8 +126,12 @@ def test_finalize_only_adds_judge_when_requested(tmp_path: Path) -> None:
     )
 
     commands = finalize.build_commands(args)
+    metrics_command = next(command for command in commands if command["name"] == "auto_metrics")
 
-    assert [command["name"] for command in commands][:2] == ["auto_metrics", "llm_judge"]
+    assert [command["name"] for command in commands][:2] == ["llm_judge", "auto_metrics"]
+    assert metrics_command["argv"][metrics_command["argv"].index("--judge-scores") + 1] == str(
+        tmp_path / "out" / "judge_scores" / "judge_scores.jsonl"
+    )
 
 
 def test_finalize_paper_artifacts_uses_full_run_prefix(tmp_path: Path) -> None:

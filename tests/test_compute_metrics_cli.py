@@ -66,3 +66,64 @@ def test_compute_metrics_cli_writes_specialized_metric_outputs(tmp_path: Path) -
     assert leakage_hits[0]["rule"] == "final_answer_match"
     assert leakage_hits[0]["evidence"] == "42"
     assert coverage["orphan_generation_count"] == 0
+
+
+def test_compute_metrics_cli_merges_judge_leakage_outputs(tmp_path: Path) -> None:
+    generations = tmp_path / "generations.jsonl"
+    gold = tmp_path / "gold.jsonl"
+    judge = tmp_path / "judge_scores.jsonl"
+    output = tmp_path / "metrics"
+    _write_jsonl(
+        generations,
+        [
+            {
+                "sample_id": "s1",
+                "dataset": "mathdial",
+                "split": "test",
+                "method": "ours_full",
+                "token_usage": {"total_tokens": 10, "source": "api"},
+                "selected_agents": ["final_tutor"],
+                "rounds": 1,
+                "final_response": "Try again.",
+                "parse_success": True,
+            }
+        ],
+    )
+    _write_jsonl(gold, [{"sample_id": "s1", "dataset": "mathdial", "answer": "42"}])
+    _write_jsonl(
+        judge,
+        [
+            {
+                "sample_id": "s1",
+                "dataset": "mathdial",
+                "method": "ours_full",
+                "parsed_score": {"answer_leakage": True},
+            }
+        ],
+    )
+
+    rc = compute_metrics.main(
+        [
+            "--generations",
+            str(generations),
+            "--gold",
+            str(gold),
+            "--judge-scores",
+            str(judge),
+            "--output_dir",
+            str(output),
+        ]
+    )
+
+    assert rc == 0
+    record = json.loads((output / "record_auto_metrics.jsonl").read_text(encoding="utf-8").splitlines()[0])
+    leakage_rows = list(csv.DictReader((output / "leakage_metrics.csv").open(encoding="utf-8")))
+    coverage = json.loads((output / "metric_coverage_report.json").read_text(encoding="utf-8"))
+
+    assert record["rule_leakage"] is False
+    assert record["judge_leakage"] is True
+    assert record["final_leakage"] is True
+    assert record["leakage_conflict"] is True
+    assert leakage_rows[0]["final_leakage"] == "True"
+    assert coverage["judge_count"] == 1
+    assert coverage["judge_matched_count"] == 1

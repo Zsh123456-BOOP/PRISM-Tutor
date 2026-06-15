@@ -16,6 +16,8 @@ from prism_tutor.eval.leakage_detector import detect_leakage
 
 
 def _files(path: str | Path) -> list[Path]:
+    if path in ("", None):
+        return []
     p = Path(path)
     if not p.exists():
         return []
@@ -65,12 +67,14 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Compute automatic metrics from generation JSONL logs.")
     parser.add_argument("--generations", default="outputs/generations")
     parser.add_argument("--gold", default="data/splits")
+    parser.add_argument("--judge-scores", default="", help="Optional judge_scores.jsonl or directory for final leakage merge.")
     parser.add_argument("--output_dir", default="outputs/metrics")
     args = parser.parse_args(argv)
 
     generation_rows = _read_many(_files(args.generations))
     gold_rows = _read_many(_files(args.gold))
-    result = compute_auto_metrics(generation_rows, gold_rows)
+    judge_rows = _read_many(_files(args.judge_scores))
+    result = compute_auto_metrics(generation_rows, gold_rows, judge_rows)
 
     out = Path(args.output_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -103,8 +107,22 @@ def main(argv: list[str] | None = None) -> int:
         "tentative_update_rate",
         "state_metric_coverage",
     ]
+    leakage_fields = [
+        "dataset",
+        "split",
+        "sample_id",
+        "method",
+        "rule_leakage",
+        "judge_leakage",
+        "final_leakage",
+        "leakage_conflict",
+        "judge_leakage_coverage",
+        "leakage_matched_rules",
+        "leakage_hit_count",
+    ]
     write_csv(out / "routing_metrics.csv", _subset_rows(result["record_metrics"], routing_fields), routing_fields)
     write_csv(out / "state_metrics.csv", _subset_rows(result["record_metrics"], state_fields), state_fields)
+    write_csv(out / "leakage_metrics.csv", _subset_rows(result["record_metrics"], leakage_fields), leakage_fields)
     write_jsonl(out / "leakage_rule_hits.jsonl", _leakage_hits(generation_rows, gold_rows))
     write_json(out / "metric_coverage_report.json", result["coverage_report"])
     write_json(out / "metric_alignment_report.json", {"orphan_generations": result["orphan_generations"], "missing_samples": result["missing_samples"]})

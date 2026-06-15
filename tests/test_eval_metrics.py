@@ -138,3 +138,44 @@ def test_parse_failed_records_are_kept_but_structured_metrics_are_missing():
     assert aggregate["parse_success_rate"] == 0.0
     assert aggregate["internal_correctness_coverage"] == 0.0
     assert aggregate["misconception_coverage"] == 0.0
+
+
+def test_judge_leakage_merges_with_rule_leakage_for_final_label():
+    generations = [
+        {
+            "sample_id": "s1",
+            "dataset": "mathdial",
+            "split": "test",
+            "method": "ours",
+            "token_usage": {"total_tokens": 5, "source": "api"},
+            "selected_agents": ["final_tutor"],
+            "rounds": 1,
+            "final_response": "Try one more intermediate step.",
+            "parse_success": True,
+        }
+    ]
+    gold = [{"sample_id": "s1", "dataset": "mathdial", "answer": "42"}]
+    judge = [
+        {
+            "sample_id": "s1",
+            "dataset": "mathdial",
+            "method": "ours",
+            "parsed_score": {"answer_leakage": True},
+        }
+    ]
+
+    result = compute_auto_metrics(generations, gold, judge)
+    row = result["record_metrics"][0]
+    aggregate = result["aggregate_metrics"][0]
+
+    assert row["rule_leakage"] is False
+    assert row["judge_leakage"] is True
+    assert row["final_leakage"] is True
+    assert row["leakage_conflict"] is True
+    assert row["judge_leakage_coverage"] == 1.0
+    assert result["coverage_report"]["judge_count"] == 1
+    assert result["coverage_report"]["judge_matched_count"] == 1
+    assert aggregate["rule_leakage_rate"] == 0.0
+    assert aggregate["judge_leakage_rate"] == 1.0
+    assert aggregate["final_leakage_rate"] == 1.0
+    assert aggregate["leakage_conflict_rate"] == 1.0
