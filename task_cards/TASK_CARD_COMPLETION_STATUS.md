@@ -2,22 +2,22 @@
 
 ## 当前状态
 
-本仓库已经具备 Task Card 01-16 的可运行代码骨架、mock/dry-run 端到端链路，以及服务器上的 Qwen3-8B vLLM live smoke 链路。当前 MathDial 与 Bridge 已完成真实 raw 数据下载、schema build 和小规模 live generation smoke；Math Misconception Benchmark 220/55 数据源尚未定位，尚未运行 Exp0-Exp6 完整实验、尚未调用真实 DeepSeek judge API，也尚未执行正式 blind human audit。
+本仓库已经具备 Task Card 01-16 的可运行代码骨架、mock/dry-run 端到端链路，以及服务器上的 Qwen3-8B vLLM live smoke 链路。MathDial、Bridge 与 MaE Math Misconceptions 三个真实数据集均已下载、传输到服务器并完成 schema build。Exp0-Exp6 已完成真实 Qwen live smoke（limit=1）与 downstream metrics/tables/figures/artifact smoke；真实 DeepSeek judge 已对 live smoke 123 条 generation 完成评分。当前尚未运行全量 Exp0-Exp6 正式实验，也尚未执行正式人工标注版 200 条 blind human audit。
 
 ## 已完成的代码路径
 
 - [x] 01 项目初始化与复现规范：`configs/`、`environment.yml`、`requirements.txt`、`pyproject.toml`、复现 metadata、`.gitignore`。
 - [x] 02 环境检查：`scripts/00_prepare_env_check.py` 可生成 env check report。
 - [x] 03 Qwen3-8B vLLM 服务配置：`serving/start_vllm_*.sh`、`serving/health_check.py` dry-run 与服务器 live health check 可用。
-- [x] 04 数据 schema 与 split：`scripts/01_build_datasets.py`、`prism_tutor/data/` 支持本地 raw JSON/JSONL/CSV；MathDial 与 Bridge loader 已按真实源格式验证。
+- [x] 04 数据 schema 与 split：`scripts/01_build_datasets.py`、`prism_tutor/data/` 支持本地 raw JSON/JSONL/CSV；MathDial、Bridge、MaE Misconception loader 已按真实源格式验证。
 - [x] 05 Agent schema 与 base client：`prism_tutor/agents/schemas.py`、mock-safe OpenAI-compatible client，支持 endpoint-specific served model name。
 - [x] 06 Agent prompt 与 JSON repair：prompt、`<think>` 剥离、retry/repair parser。
 - [x] 07 Runtime state：`prism_tutor/runtime/` graph state、checkpoint、node interface。
 - [x] 08 Baseline 方法：method registry 覆盖 B0-B5 与实验变体。
 - [x] 09 PRISM 模块：risk estimator、QoS router、budget controller、state commit、M1/M2/M3 graph。
 - [x] 10 Runner 与日志：`scripts/02_run_generation.py` 生成 JSONL raw logs 与 manifest，支持 `--live-llm` 真实 vLLM endpoint 调用。
-- [x] 11 自动指标：`scripts/04_compute_metrics.py` 生成 record/aggregate metrics 和 coverage report。
-- [x] 12 LLM judge：`scripts/03_run_judge.py` 默认 mock，真实 DeepSeek 需显式环境变量。
+- [x] 11 自动指标：`scripts/04_compute_metrics.py` 生成 record/aggregate metrics 和 coverage report，并已支持 unified schema gold 字段映射。
+- [x] 12 LLM judge：`scripts/03_run_judge.py` 默认 mock；真实 DeepSeek 需显式环境变量，已验证 `thinking_type=disabled` 后可稳定解析。
 - [x] 13 实验矩阵：`configs/experiments.yaml` 与 `scripts/run_exp*.sh`。
 - [x] 14 统计、表格和图：`scripts/05_make_tables.py`、`scripts/06_make_figures.py`。
 - [x] 15 Human audit：`scripts/07_sample_human_audit.py`、`scripts/08_human_agreement.py`。
@@ -26,8 +26,8 @@
 ## 已验证命令
 
 - [x] 本机 `python -m compileall prism_tutor scripts data serving tests`
-- [x] 本机 `python -m pytest -q`，结果：38 passed。
-- [x] 服务器 `python -m pytest -q`，结果：38 passed。
+- [x] 本机 `python -m pytest -q`，结果：45 passed。
+- [x] 服务器 `python -m pytest -q`，结果：45 passed。
 - [x] `python scripts/00_prepare_env_check.py --config configs/default.yaml --dry-run`
 - [x] `python scripts/01_build_datasets.py --help`
 - [x] `bash serving/start_vllm_gpu0.sh`
@@ -38,19 +38,27 @@
 - [x] live smoke 日志确认：`single_tutor` 1 次 agent call，`ours_full` 10 次 agent call，token usage 来源为 API，两个 endpoint 均被调用，raw/stripped completion 无 `<think>` 残留。
 - [x] 本机下载并传输 MathDial：`eth-nlped/mathdial`，服务器 build 后 `processed_count=18609`，官方 test split `3699`。
 - [x] 本机下载并传输 Bridge：`rosewang2008/bridge`，服务器 build 后 `processed_count=700`，test split `565`，student error/remediation/teacher intention 完整率均为 `1.0`。
+- [x] 本机下载并传输 MaE Math Misconceptions：`nancyotero-projects/math-misconceptions`，服务器 build 后 `processed_count=220`，test split `220`，unique misconception labels `55`。
 - [x] 真实 MathDial test live smoke：`live_qwen_mathdial_real_smoke`，2 attempted / 2 succeeded / 0 failed，API token usage 正常，无 `<think>`。
 - [x] 真实 Bridge test live smoke：`live_qwen_bridge_real_smoke`，2 attempted / 2 succeeded / 0 failed，API token usage 正常，两个 endpoint 被调用。
+- [x] 真实 Misconception test live smoke：`live_qwen_misconception_real_smoke`，2 attempted / 2 succeeded / 0 failed，API token usage 正常。
+- [x] Exp0-Exp6 dry-run matrix smoke：123 generation rows，judge/metrics/tables/figures/human-audit sample/paper artifacts 全链路生成。
+- [x] Exp0-Exp6 Qwen live matrix smoke：`outputs/exp_matrix_live_smoke`，123 generation rows，123 success，123 parse_success，31 methods，3 datasets，两个 endpoint 均被调用，无 `<think>`。
+- [x] live smoke 自动指标：123 rows，aggregate 81 rows，routing missing gold `0`，orphan_generation_count `0`。
+- [x] live smoke 真实 DeepSeek judge：`outputs/exp_matrix_live_smoke/judge_scores_real_full`，123 rows，123 parsed，0 errors，metadata 记录 actual_model、api_date、temperature、top_p、max_tokens、thinking_type。
+- [x] live smoke blind audit 文件：`outputs/exp_matrix_live_smoke/human_audit_200`，目标 200，实际 123，shortage 已写入 sampling manifest。
 
 ## 仍需服务器真实执行的项目
 
 - [x] 在 `10.154.22.11` 的 `zsh` 账户中创建 conda 环境 `prism_tutor`。
 - [x] 在 2、3 号 GPU 上启动 Qwen3-8B full BF16 vLLM，不使用 AWQ/FP8/4-bit 主实验量化。
-- [x] 将真实 MathDial、Bridge raw 数据放入 `data/raw/` 并运行 dataset build。
-- [ ] 定位并放入方案要求的 220 条/55 类 Math Misconception Benchmark raw 数据；不得用不等价的大型替代数据冒充主实验数据。
-- [ ] 使用真实 Qwen3-8B endpoint 跑 Exp0-Exp6 generation。
-- [ ] 使用真实 DeepSeek judge API 跑 judge，并保存 actual model id、日期与 raw response。
-- [ ] 全部自动实验完成后执行 200 条 blind human audit。
-- [ ] 用真实 raw logs 重新生成正式论文 tables、figures、paper artifacts。
+- [x] 将真实 MathDial、Bridge、MaE Misconception raw 数据放入 `data/raw/` 并运行 dataset build。
+- [x] 使用真实 Qwen3-8B endpoint 跑 Exp0-Exp6 live smoke generation。
+- [x] 使用真实 DeepSeek judge API 跑 live smoke judge，并保存 actual model id、日期与 raw response。
+- [x] 用 live smoke raw logs 重新生成 smoke 版 tables、figures、paper artifacts。
+- [ ] 使用真实 Qwen3-8B endpoint 跑全量 Exp0-Exp6 generation。
+- [ ] 全量实验完成后执行正式 200 条 blind human audit，并填入人工标签后计算 agreement。
+- [ ] 用全量真实 raw logs 重新生成正式论文 tables、figures、paper artifacts。
 
 ## 安全边界
 
