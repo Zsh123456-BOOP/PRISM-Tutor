@@ -335,6 +335,67 @@ def _compact_status(report: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _read_supervisor_events(path: str | Path, limit: int | None = None) -> list[dict[str, Any]]:
+    log_path = Path(path)
+    if not log_path.exists():
+        return []
+    events = []
+    with log_path.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            if not line.strip():
+                continue
+            try:
+                events.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    return events[-limit:] if limit is not None else events
+
+
+def _parse_timestamp(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def progress_report(plan: dict[str, Any], *, supervisor_log: str | Path | None = None, rate_window: int = 5) -> dict[str, Any]:
+    if rate_window < 2:
+        raise ValueError("rate_window must be >= 2")
+    summary = _compact_status(status_report(plan))
+    estimated = int(summary["estimated_records"] or 0)
+    generated = int(summary["generation_rows"] or 0)
+    remaining = max(0, estimated - generated)
+    completion_fraction = (generated / estimated) if estimated else None
+    supervisor_log = supervisor_log or Path(plan["output_dir"]) / "logs" / "shards" / "supervisor_compact.jsonl"
+    events = _read_supervisor_events(supervisor_log, limit=rate_window)
+    rate_rows_per_minute = None
+    eta_hours = None
+    if len(events) >= 2:
+        first = events[0]
+        last = events[-1]
+        first_time = _parse_timestamp(first.get("timestamp_utc"))
+        last_time = _parse_timestamp(last.get("timestamp_utc"))
+        first_rows = int(first.get("status", {}).get("generation_rows") or 0)
+        last_rows = int(last.get("status", {}).get("generation_rows") or 0)
+        if first_time and last_time:
+            elapsed_minutes = (last_time - first_time).total_seconds() / 60
+            row_delta = last_rows - first_rows
+            if elapsed_minutes > 0 and row_delta > 0:
+                rate_rows_per_minute = row_delta / elapsed_minutes
+                eta_hours = (remaining / rate_rows_per_minute) / 60 if rate_rows_per_minute else None
+    return {
+        **summary,
+        "completion_fraction": completion_fraction,
+        "remaining_records": remaining,
+        "supervisor_log": str(supervisor_log),
+        "rate_window_events": len(events),
+        "recent_rows_per_minute": rate_rows_per_minute,
+        "eta_hours": eta_hours,
+    }
+
+
 def supervise_jobs(
     plan_path: str | Path,
     *,
@@ -412,6 +473,11 @@ def main(argv: list[str] | None = None) -> int:
     maintain_parser.add_argument("--target-running", type=int, default=2)
     maintain_parser.add_argument("--max-launches", type=int)
 
+    progress_parser = sub.add_parser("progress")
+    progress_parser.add_argument("--plan", default="outputs/full_run/shard_plan.json")
+    progress_parser.add_argument("--supervisor-log")
+    progress_parser.add_argument("--rate-window", type=int, default=5)
+
     supervise_parser = sub.add_parser("supervise")
     supervise_parser.add_argument("--plan", default="outputs/full_run/shard_plan.json")
     supervise_parser.add_argument("--target-running", type=int, default=2)
@@ -453,6 +519,14 @@ def main(argv: list[str] | None = None) -> int:
             load_plan(args.plan),
             target_running=args.target_running,
             max_launches=args.max_launches,
+        )
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
+    if args.command == "progress":
+        result = progress_report(
+            load_plan(args.plan),
+            supervisor_log=args.supervisor_log,
+            rate_window=args.rate_window,
         )
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0

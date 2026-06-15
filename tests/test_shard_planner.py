@@ -242,3 +242,81 @@ def test_supervise_jobs_stops_when_all_jobs_completed(tmp_path: Path, monkeypatc
 
     assert result["cycles"] == 1
     assert result["last_status"]["by_status"] == {"completed": 2}
+
+
+def test_progress_report_estimates_recent_rate_and_eta(tmp_path: Path) -> None:
+    plan = {
+        "output_dir": str(tmp_path / "out"),
+        "jobs": [
+            {
+                "job_id": "done",
+                "experiment": "exp0",
+                "shard_index": 0,
+                "num_shards": 2,
+                "estimated_records": 10,
+                "paths": {
+                    "generations": str(tmp_path / "done.jsonl"),
+                    "errors": str(tmp_path / "done_errors.jsonl"),
+                    "manifest": str(tmp_path / "done_manifest.json"),
+                },
+            },
+            {
+                "job_id": "running",
+                "experiment": "exp0",
+                "shard_index": 1,
+                "num_shards": 2,
+                "estimated_records": 10,
+                "paths": {
+                    "generations": str(tmp_path / "running.jsonl"),
+                    "errors": str(tmp_path / "running_errors.jsonl"),
+                    "manifest": str(tmp_path / "running_manifest.json"),
+                },
+            },
+        ],
+    }
+    _write_jsonl(tmp_path / "done.jsonl", [{"sample_id": f"a{i}"} for i in range(10)])
+    (tmp_path / "done_manifest.json").write_text(json.dumps({"status": "completed"}), encoding="utf-8")
+    _write_jsonl(tmp_path / "running.jsonl", [{"sample_id": f"b{i}"} for i in range(2)])
+    log = tmp_path / "supervisor.jsonl"
+    _write_jsonl(
+        log,
+        [
+            {"timestamp_utc": "2026-06-15T00:00:00+00:00", "status": {"generation_rows": 2}},
+            {"timestamp_utc": "2026-06-15T00:10:00+00:00", "status": {"generation_rows": 12}},
+        ],
+    )
+
+    report = shard_planner.progress_report(plan, supervisor_log=log)
+
+    assert report["generation_rows"] == 12
+    assert report["estimated_records"] == 20
+    assert report["remaining_records"] == 8
+    assert report["recent_rows_per_minute"] == 1.0
+    assert round(report["eta_hours"], 3) == 0.133
+
+
+def test_progress_report_works_without_supervisor_log(tmp_path: Path) -> None:
+    plan = {
+        "output_dir": str(tmp_path / "out"),
+        "jobs": [
+            {
+                "job_id": "pending",
+                "experiment": "exp0",
+                "shard_index": 0,
+                "num_shards": 1,
+                "estimated_records": 5,
+                "paths": {
+                    "generations": str(tmp_path / "pending.jsonl"),
+                    "errors": str(tmp_path / "pending_errors.jsonl"),
+                    "manifest": str(tmp_path / "pending_manifest.json"),
+                },
+            }
+        ],
+    }
+
+    report = shard_planner.progress_report(plan, supervisor_log=tmp_path / "missing.jsonl")
+
+    assert report["completion_fraction"] == 0
+    assert report["rate_window_events"] == 0
+    assert report["recent_rows_per_minute"] is None
+    assert report["eta_hours"] is None
