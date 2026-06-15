@@ -141,3 +141,40 @@ def test_launch_jobs_selects_distinct_next_jobs(monkeypatch) -> None:
 
     assert launched == ["a", "b"]
     assert result["count"] == 2
+
+
+def test_maintain_jobs_does_not_launch_when_target_is_met(monkeypatch) -> None:
+    plan = {"jobs": [{"job_id": "a", "argv": ["echo", "a"], "paths": {}}]}
+    monkeypatch.setattr(
+        shard_planner,
+        "status_report",
+        lambda plan: {"by_status": {"running": 2}, "generation_rows": 4, "error_rows": 0},
+    )
+
+    result = shard_planner.maintain_jobs(plan, target_running=2)
+
+    assert result["requested_launches"] == 0
+    assert result["launched"] == []
+    assert result["before"]["by_status"] == {"running": 2}
+
+
+def test_maintain_jobs_launches_missing_background_jobs(monkeypatch) -> None:
+    plan = {"jobs": [{"job_id": "a", "argv": ["echo", "a"], "paths": {}}, {"job_id": "b", "argv": ["echo", "b"], "paths": {}}]}
+    reports = [
+        {"by_status": {"running": 1, "pending": 2}, "generation_rows": 3, "error_rows": 0},
+        {"by_status": {"running": 3}, "generation_rows": 3, "error_rows": 0},
+    ]
+    launched_args = []
+    monkeypatch.setattr(shard_planner, "status_report", lambda plan: reports.pop(0))
+
+    def fake_launch_jobs(plan, *, job_id, launch_next, background, count):
+        launched_args.append((job_id, launch_next, background, count))
+        return {"launched": [{"job_id": "a", "pid": 123, "background": True}]}
+
+    monkeypatch.setattr(shard_planner, "launch_jobs", fake_launch_jobs)
+
+    result = shard_planner.maintain_jobs(plan, target_running=3, max_launches=1)
+
+    assert result["requested_launches"] == 1
+    assert result["launched"] == [{"job_id": "a", "pid": 123, "background": True}]
+    assert launched_args == [(None, True, True, 1)]

@@ -275,6 +275,44 @@ def launch_jobs(plan: dict[str, Any], *, job_id: str | None, launch_next: bool, 
     return {"launched": launched, "count": len(launched), "background": background}
 
 
+def maintain_jobs(plan: dict[str, Any], *, target_running: int, max_launches: int | None = None) -> dict[str, Any]:
+    if target_running < 1:
+        raise ValueError("target_running must be >= 1")
+    report_before = status_report(plan)
+    running = int(report_before["by_status"].get("running", 0))
+    needed = max(0, target_running - running)
+    if max_launches is not None:
+        if max_launches < 0:
+            raise ValueError("max_launches must be >= 0")
+        needed = min(needed, max_launches)
+    if needed == 0:
+        launched: list[dict[str, Any]] = []
+    else:
+        launched = launch_jobs(
+            plan,
+            job_id=None,
+            launch_next=True,
+            background=True,
+            count=needed,
+        )["launched"]
+    report_after = status_report(plan)
+    return {
+        "target_running": target_running,
+        "requested_launches": needed,
+        "launched": launched,
+        "before": {
+            "by_status": report_before["by_status"],
+            "generation_rows": report_before["generation_rows"],
+            "error_rows": report_before["error_rows"],
+        },
+        "after": {
+            "by_status": report_after["by_status"],
+            "generation_rows": report_after["generation_rows"],
+            "error_rows": report_after["error_rows"],
+        },
+    }
+
+
 def _split_csv(value: str | None) -> list[str] | None:
     if value is None:
         return None
@@ -307,6 +345,11 @@ def main(argv: list[str] | None = None) -> int:
     launch_parser.add_argument("--background", action="store_true")
     launch_parser.add_argument("--count", type=int, default=1)
 
+    maintain_parser = sub.add_parser("maintain")
+    maintain_parser.add_argument("--plan", default="outputs/full_run/shard_plan.json")
+    maintain_parser.add_argument("--target-running", type=int, default=2)
+    maintain_parser.add_argument("--max-launches", type=int)
+
     args = parser.parse_args(argv)
     if args.command == "plan":
         plan = build_plan(
@@ -336,6 +379,14 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return max(int(item.get("returncode", 0)) for item in result["launched"])
+    if args.command == "maintain":
+        result = maintain_jobs(
+            load_plan(args.plan),
+            target_running=args.target_running,
+            max_launches=args.max_launches,
+        )
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
     return 2
 
 
