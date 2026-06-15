@@ -105,7 +105,9 @@ def test_finalize_only_adds_judge_when_requested(tmp_path: Path) -> None:
 
 
 def test_finalize_paper_artifacts_uses_full_run_prefix(tmp_path: Path) -> None:
+    plan = tmp_path / "plan.json"
     args = finalize.argparse.Namespace(
+        plan=str(plan),
         output_dir=str(tmp_path / "out"),
         gold="data/splits",
         run_judge=False,
@@ -120,6 +122,8 @@ def test_finalize_paper_artifacts_uses_full_run_prefix(tmp_path: Path) -> None:
 
     assert "--artifact-prefix" in paper_command["argv"]
     assert paper_command["argv"][paper_command["argv"].index("--artifact-prefix") + 1] == str(tmp_path / "out")
+    assert "--shard-plan" in paper_command["argv"]
+    assert paper_command["argv"][paper_command["argv"].index("--shard-plan") + 1] == str(plan)
 
 
 def test_finalize_human_audit_uses_full_run_prerequisite_paths(tmp_path: Path) -> None:

@@ -25,6 +25,18 @@ def _load_manifests(log_dir: Path) -> list[dict]:
     return manifests
 
 
+def _load_shard_plan(path: str | None) -> dict | None:
+    if not path:
+        return None
+    plan_path = Path(path)
+    if not plan_path.exists():
+        return None
+    try:
+        return json.loads(plan_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Export paper artifacts and reproducibility checklist.")
     parser.add_argument("--root", default=".")
@@ -35,6 +47,7 @@ def main() -> int:
         default="outputs",
         help="Repository-relative output prefix to check in the reproducibility checklist and artifact index.",
     )
+    parser.add_argument("--shard-plan", help="Optional full-run shard plan used to populate Exp0-Exp6 manifest metadata.")
     args = parser.parse_args()
 
     files = export_paper_artifacts(
@@ -42,6 +55,7 @@ def main() -> int:
         args.output_dir,
         _load_manifests(Path(args.logs)),
         artifact_prefix=args.artifact_prefix,
+        shard_plan=_load_shard_plan(args.shard_plan),
     )
     print(json.dumps({key: str(value) for key, value in files.items()}, indent=2))
     return 0

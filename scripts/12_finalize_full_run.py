@@ -62,6 +62,23 @@ def _cmd(*parts: str) -> list[str]:
     return [sys.executable, *parts]
 
 
+def _paper_artifact_argv(args: argparse.Namespace, paper_artifacts: str, logs: str) -> list[str]:
+    argv = _cmd(
+        "scripts/09_export_paper_artifacts.py",
+        "--root",
+        ".",
+        "--output_dir",
+        paper_artifacts,
+        "--logs",
+        logs,
+        "--artifact-prefix",
+        args.output_dir,
+    )
+    if getattr(args, "plan", None):
+        argv.extend(["--shard-plan", args.plan])
+    return argv
+
+
 def build_commands(args: argparse.Namespace) -> list[dict[str, Any]]:
     generations = str(Path(args.output_dir) / "generations")
     metrics = str(Path(args.output_dir) / "metrics")
@@ -127,17 +144,7 @@ def build_commands(args: argparse.Namespace) -> list[dict[str, Any]]:
     commands.append(
         {
             "name": "paper_artifacts",
-            "argv": _cmd(
-                "scripts/09_export_paper_artifacts.py",
-                "--root",
-                ".",
-                "--output_dir",
-                paper_artifacts,
-                "--logs",
-                logs,
-                "--artifact-prefix",
-                args.output_dir,
-            ),
+            "argv": _paper_artifact_argv(args, paper_artifacts, logs),
         }
     )
     return commands
