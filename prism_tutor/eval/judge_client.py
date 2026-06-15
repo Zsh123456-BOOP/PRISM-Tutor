@@ -30,6 +30,7 @@ class JudgeClientConfig:
     timeout_s: float = 30.0
     retries: int = 1
     response_format_json: bool = False
+    thinking_type: str | None = "disabled"
 
 
 class MockJudgeClient:
@@ -97,6 +98,8 @@ class DeepSeekJudgeClient(MockJudgeClient):
         }
         if self.config.response_format_json:
             body["response_format"] = {"type": "json_object"}
+        if self.config.thinking_type:
+            body["thinking"] = {"type": self.config.thinking_type}
         raw_response = ""
         error = None
         parsed_score = None
