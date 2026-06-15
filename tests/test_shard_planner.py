@@ -270,6 +270,7 @@ def test_progress_report_estimates_recent_rate_and_eta(tmp_path: Path) -> None:
                     "generations": str(tmp_path / "running.jsonl"),
                     "errors": str(tmp_path / "running_errors.jsonl"),
                     "manifest": str(tmp_path / "running_manifest.json"),
+                    "pid": str(tmp_path / "running.pid"),
                 },
             },
         ],
@@ -277,6 +278,7 @@ def test_progress_report_estimates_recent_rate_and_eta(tmp_path: Path) -> None:
     _write_jsonl(tmp_path / "done.jsonl", [{"sample_id": f"a{i}"} for i in range(10)])
     (tmp_path / "done_manifest.json").write_text(json.dumps({"status": "completed"}), encoding="utf-8")
     _write_jsonl(tmp_path / "running.jsonl", [{"sample_id": f"b{i}"} for i in range(2)])
+    (tmp_path / "running.pid").write_text(str(os.getpid()), encoding="utf-8")
     log = tmp_path / "supervisor.jsonl"
     _write_jsonl(
         log,
@@ -293,6 +295,7 @@ def test_progress_report_estimates_recent_rate_and_eta(tmp_path: Path) -> None:
     assert report["remaining_records"] == 8
     assert report["recent_rows_per_minute"] == 1.0
     assert round(report["eta_hours"], 3) == 0.133
+    assert report["health"]["status"] == "ok"
 
 
 def test_progress_report_works_without_supervisor_log(tmp_path: Path) -> None:
@@ -320,3 +323,34 @@ def test_progress_report_works_without_supervisor_log(tmp_path: Path) -> None:
     assert report["rate_window_events"] == 0
     assert report["recent_rows_per_minute"] is None
     assert report["eta_hours"] is None
+    assert report["health"]["status"] == "ok"
+
+
+def test_progress_report_marks_generation_errors_unhealthy(tmp_path: Path) -> None:
+    plan = {
+        "output_dir": str(tmp_path / "out"),
+        "jobs": [
+            {
+                "job_id": "failed",
+                "experiment": "exp0",
+                "shard_index": 0,
+                "num_shards": 1,
+                "estimated_records": 2,
+                "paths": {
+                    "generations": str(tmp_path / "failed.jsonl"),
+                    "errors": str(tmp_path / "failed_errors.jsonl"),
+                    "manifest": str(tmp_path / "failed_manifest.json"),
+                },
+            }
+        ],
+    }
+    _write_jsonl(tmp_path / "failed.jsonl", [{"sample_id": "a"}])
+    _write_jsonl(tmp_path / "failed_errors.jsonl", [{"sample_id": "a", "status": "failed"}])
+    (tmp_path / "failed_manifest.json").write_text(json.dumps({"status": "completed_with_failures"}), encoding="utf-8")
+
+    report = shard_planner.progress_report(plan, supervisor_log=tmp_path / "missing.jsonl")
+
+    assert report["error_rows"] == 1
+    assert report["health"]["status"] == "error"
+    assert "generation_errors_present" in report["health"]["issues"]
+    assert "completed_with_failures" in report["health"]["bad_statuses"]

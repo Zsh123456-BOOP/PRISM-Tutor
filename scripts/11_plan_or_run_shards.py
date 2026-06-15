@@ -360,6 +360,37 @@ def _parse_timestamp(value: str | None) -> datetime | None:
         return None
 
 
+def _health_summary(summary: dict[str, Any], rate_rows_per_minute: float | None) -> dict[str, Any]:
+    issues = []
+    recommendations = []
+    by_status = summary.get("by_status", {})
+    bad_statuses = {
+        status: count
+        for status, count in by_status.items()
+        if status not in {"completed", "running", "pending"}
+    }
+    if int(summary.get("error_rows") or 0) > 0:
+        issues.append("generation_errors_present")
+        recommendations.append("inspect generation_errors_*.jsonl and avoid increasing target_running")
+    if bad_statuses:
+        issues.append("non_terminal_bad_status")
+        recommendations.append("inspect stale/partial/invalid jobs before launching more shards")
+    if rate_rows_per_minute == 0:
+        issues.append("no_recent_progress")
+        recommendations.append("check vLLM health, GPU utilization, and running shard stdout logs")
+    if rate_rows_per_minute is None:
+        recommendations.append("collect at least two supervisor events for ETA")
+    status = "ok"
+    if issues:
+        status = "error" if "generation_errors_present" in issues or bad_statuses else "warn"
+    return {
+        "status": status,
+        "issues": issues,
+        "recommendations": recommendations,
+        "bad_statuses": bad_statuses,
+    }
+
+
 def progress_report(plan: dict[str, Any], *, supervisor_log: str | Path | None = None, rate_window: int = 5) -> dict[str, Any]:
     if rate_window < 2:
         raise ValueError("rate_window must be >= 2")
@@ -385,6 +416,8 @@ def progress_report(plan: dict[str, Any], *, supervisor_log: str | Path | None =
             if elapsed_minutes > 0 and row_delta > 0:
                 rate_rows_per_minute = row_delta / elapsed_minutes
                 eta_hours = (remaining / rate_rows_per_minute) / 60 if rate_rows_per_minute else None
+            elif elapsed_minutes > 0 and row_delta == 0:
+                rate_rows_per_minute = 0.0
     return {
         **summary,
         "completion_fraction": completion_fraction,
@@ -393,6 +426,7 @@ def progress_report(plan: dict[str, Any], *, supervisor_log: str | Path | None =
         "rate_window_events": len(events),
         "recent_rows_per_minute": rate_rows_per_minute,
         "eta_hours": eta_hours,
+        "health": _health_summary(summary, rate_rows_per_minute),
     }
 
 
