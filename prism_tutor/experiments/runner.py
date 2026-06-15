@@ -7,9 +7,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from prism_tutor.agents.base_client import BaseLLMClient, LLMClientConfig, LLMEndpointConfig
 from prism_tutor.experiments.experiment_matrix import ExperimentSpec, get_experiment
 from prism_tutor.experiments.method_registry import MethodSpec, default_method_registry
 from prism_tutor.logging.jsonl_logger import JsonlLogger
+from prism_tutor.runtime.graph_state import TutorGraphState
+from prism_tutor.runtime.prism_graph import AGENT_REGISTRY, build_prism_graph
 from prism_tutor.logging.manifest import write_experiment_manifest
 from prism_tutor.serving.endpoints import EndpointRegistry, strip_think_blocks
 from prism_tutor.utils.config import deep_merge, load_config, load_yaml
@@ -27,6 +30,7 @@ class RunnerOptions:
     resume: bool = False
     output_dir: str = "outputs"
     run_id: str | None = None
+    live_llm: bool = False
 
 
 def _slug(values: list[str]) -> str:
@@ -117,6 +121,157 @@ def _generation_config(config: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _max_tokens_from_config(config: dict[str, Any]) -> int:
+    value = config.get("generation", {}).get("max_tokens", 1024)
+    if isinstance(value, dict):
+        candidates = [int(item) for item in value.values() if isinstance(item, int | float)]
+        return max(candidates) if candidates else 1024
+    return int(value)
+
+
+def _llm_client_from_config(config: dict[str, Any]) -> BaseLLMClient:
+    model_config = config.get("model", {})
+    generation = config.get("generation", {})
+    endpoints = [
+        LLMEndpointConfig(
+            base_url=str(item["base_url"]),
+            model=str(item.get("model") or model_config.get("generator", "Qwen3-8B")),
+            name=item.get("name") or item.get("model"),
+            timeout_seconds=float(item.get("timeout_seconds", generation.get("timeout_seconds", 120))),
+        )
+        for item in model_config.get("endpoints", [])
+    ]
+    if not endpoints:
+        raise ValueError("live_llm requires model.endpoints in the run config")
+    return BaseLLMClient(
+        LLMClientConfig(
+            endpoints=endpoints,
+            model_name=str(model_config.get("generator", "Qwen3-8B")),
+            temperature=float(generation.get("temperature", 0.2)),
+            top_p=float(generation.get("top_p", 0.9)),
+            top_k=int(generation.get("top_k", 20)),
+            max_tokens=_max_tokens_from_config(config),
+            timeout_s=float(generation.get("timeout_seconds", 120)),
+            retries=int(generation.get("retries", 0)),
+            mock_mode=False,
+        )
+    )
+
+
+CONTROL_ONLY_AGENTS = {
+    "risk_estimator",
+    "qos_router",
+    "budget_controller",
+    "generic_router",
+    "selected_agents",
+    "difficulty_router",
+    "oracle_router",
+    "random_router",
+    "generic_controller",
+}
+
+
+AGENT_ALIASES = {
+    "tutor": "hint",
+    "critic": "verifier",
+    "solver_a": "solver",
+    "solver_b": "solver",
+    "solver_c": "solver",
+    "judge": "verifier",
+    "state": "state_manager",
+    "state_proposer": "state_manager",
+    "shared_memory": "state_manager",
+    "single_writer": "state_manager",
+}
+
+
+def _callable_agent_name(selected_agent: str) -> str | None:
+    if selected_agent in CONTROL_ONLY_AGENTS:
+        return None
+    return AGENT_ALIASES.get(selected_agent, selected_agent)
+
+
+def _state_to_method_result(state: TutorGraphState, *, method: MethodSpec) -> dict[str, Any]:
+    calls = state.llm_calls
+    final_call = next((call for call in reversed(calls) if call.get("agent_name") == "final_tutor"), None)
+    raw_completion = str(final_call.get("raw_completion", "")) if final_call else ""
+    parsed_final = final_call.get("parsed_output") if final_call else None
+    if isinstance(parsed_final, dict) and parsed_final.get("response"):
+        final_response = str(parsed_final["response"])
+    else:
+        final_response = strip_think_blocks(raw_completion)
+
+    token_usage = {
+        "prompt_tokens": sum(int(call.get("usage", {}).get("prompt_tokens", 0)) for call in calls),
+        "completion_tokens": sum(int(call.get("usage", {}).get("completion_tokens", 0)) for call in calls),
+        "total_tokens": sum(int(call.get("usage", {}).get("total_tokens", 0)) for call in calls),
+        "source": "api" if any(call.get("usage", {}).get("source") == "api" for call in calls) else "estimated",
+    }
+    call_errors = [
+        {"agent_name": call.get("agent_name"), **call["error"]}
+        for call in calls
+        if isinstance(call.get("error"), dict)
+    ]
+    state_errors = [error.model_dump(mode="json") for error in state.errors]
+    return {
+        "selected_agents": state.selected_agents or list(method.selected_agents),
+        "rounds": max(method.rounds, state.rounds),
+        "risk_scores": state.risk_scores,
+        "messages": [
+            {"role": "agent", "agent_name": call.get("agent_name", ""), "content": call.get("stripped_output", "")}
+            for call in calls
+        ],
+        "state": state.snapshot(),
+        "token_usage": token_usage,
+        "agent_calls": len(calls),
+        "raw_completion": raw_completion,
+        "final_response": final_response,
+        "parse_success": bool(calls) and all(bool(call.get("parse_success")) for call in calls),
+        "errors": state_errors + call_errors,
+    }
+
+
+def _run_live_prism(sample: dict[str, Any], method: MethodSpec, client: BaseLLMClient) -> dict[str, Any]:
+    method_map = {"ours_routing": "M1", "ours_routing_budget": "M2", "ours_full": "M3"}
+    graph_method = method_map.get(method.name, "M3")
+    graph = build_prism_graph(method=graph_method, client=client)
+    state = graph.invoke(TutorGraphState(sample=sample, method=method.name))
+    return _state_to_method_result(state, method=method)
+
+
+def _run_live_baseline(sample: dict[str, Any], method: MethodSpec, client: BaseLLMClient) -> dict[str, Any]:
+    state = TutorGraphState(sample=sample, method=method.name, rounds=method.rounds)
+    state.selected_agents.extend(method.selected_agents)
+    for selected_agent in method.selected_agents:
+        agent_name = _callable_agent_name(selected_agent)
+        if agent_name is None:
+            state.agent_outputs.setdefault(selected_agent, []).append({"control_only": True})
+            continue
+        agent = AGENT_REGISTRY.get(agent_name)
+        if agent is None:
+            state.agent_outputs.setdefault(selected_agent, []).append({"skipped_unknown_agent": True})
+            continue
+        record = agent.invoke(
+            sample=sample,
+            state={
+                "method": method.name,
+                "selected_agent": selected_agent,
+                "agent_outputs": state.agent_outputs,
+                "total_tokens": state.total_tokens,
+            },
+            client=client,
+            method=method.name,
+        )
+        state.add_call(record)
+    return _state_to_method_result(state, method=method)
+
+
+def _run_live_method(sample: dict[str, Any], method: MethodSpec, client: BaseLLMClient) -> dict[str, Any]:
+    if method.name.startswith("ours_") or method.family == "ablation":
+        return _run_live_prism(sample, method, client)
+    return _run_live_baseline(sample, method, client)
+
+
 def _success_record(
     *,
     sample: dict[str, Any],
@@ -128,7 +283,7 @@ def _success_record(
 ) -> dict[str, Any]:
     raw_completion = str(method_result.get("raw_completion", method_result.get("final_response", "")))
     final_response = str(method_result.get("final_response", strip_think_blocks(raw_completion)))
-    token_usage = {
+    token_usage = method_result.get("token_usage") or {
         "prompt_tokens": len(str(sample.get("problem", "")).split()),
         "completion_tokens": len(raw_completion.split()),
         "total_tokens": len(str(sample.get("problem", "")).split()) + len(raw_completion.split()),
@@ -199,6 +354,7 @@ def run_generation(options: RunnerOptions) -> dict[str, Any]:
     registry = default_method_registry()
     methods = registry.resolve(method_names)
     endpoint_registry = EndpointRegistry.from_config(config)
+    llm_client = _llm_client_from_config(config) if options.live_llm else None
     paths = _output_paths(options, method_names, datasets, split)
 
     generation_log = JsonlLogger(paths["generations"])
@@ -225,7 +381,10 @@ def run_generation(options: RunnerOptions) -> dict[str, Any]:
                     attempted += 1
                     try:
                         started = time.perf_counter()
-                        result = method.run(sample, {"config": config, "endpoint": endpoint, "sample_index": sample_index})
+                        if llm_client is not None:
+                            result = _run_live_method(sample, method, llm_client)
+                        else:
+                            result = method.run(sample, {"config": config, "endpoint": endpoint, "sample_index": sample_index})
                         record = _success_record(
                             sample=sample,
                             method=method,
@@ -253,6 +412,7 @@ def run_generation(options: RunnerOptions) -> dict[str, Any]:
             "methods": method_names,
             "limit": options.limit,
             "resume": options.resume,
+            "live_llm": options.live_llm,
             "sample_counts": sample_counts,
             "paths": {key: str(value) for key, value in paths.items()},
             "counts": {

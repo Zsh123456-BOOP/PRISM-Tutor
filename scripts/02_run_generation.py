@@ -32,6 +32,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--output_dir", default="outputs")
     parser.add_argument("--run-id")
+    parser.add_argument("--live-llm", action="store_true", help="Call configured vLLM endpoints instead of dry-run methods.")
     args = parser.parse_args(argv)
 
     result = run_generation(
@@ -46,6 +47,7 @@ def main(argv: list[str] | None = None) -> int:
             resume=args.resume,
             output_dir=args.output_dir,
             run_id=args.run_id,
+            live_llm=args.live_llm,
         )
     )
     print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))

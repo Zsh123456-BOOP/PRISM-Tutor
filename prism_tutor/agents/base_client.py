@@ -24,10 +24,23 @@ from .schemas import (
 from .types import LLMCallRecord, LLMError, LLMUsage
 
 
+class LLMEndpointConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    base_url: str
+    model: str | None = None
+    name: str | None = None
+    timeout_seconds: float | None = Field(default=None, gt=0)
+
+    @property
+    def identifier(self) -> str:
+        return self.name or self.model or self.base_url
+
+
 class LLMClientConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    endpoints: list[str] = Field(default_factory=lambda: ["mock://qwen3-8b"])
+    endpoints: list[str | LLMEndpointConfig] = Field(default_factory=lambda: ["mock://qwen3-8b"])
     model_name: str = "Qwen3-8B"
     temperature: float = Field(default=0.2, ge=0)
     top_p: float = Field(default=0.9, ge=0, le=1)
@@ -40,7 +53,7 @@ class LLMClientConfig(BaseModel):
 
     @field_validator("endpoints")
     @classmethod
-    def endpoints_not_empty(cls, value: list[str]) -> list[str]:
+    def endpoints_not_empty(cls, value: list[str | LLMEndpointConfig]) -> list[str | LLMEndpointConfig]:
         if not value:
             raise ValueError("at least one endpoint is required")
         return value
@@ -55,22 +68,28 @@ class BaseLLMClient:
 
     def __init__(self, config: LLMClientConfig | None = None) -> None:
         self.config = config or LLMClientConfig()
-        self._endpoint_cycle = cycle(self.config.endpoints)
+        self._endpoints = [self._normalize_endpoint(endpoint) for endpoint in self.config.endpoints]
+        self._endpoint_cycle = cycle(self._endpoints)
 
-    def _next_endpoint(self) -> str:
+    def _next_endpoint(self) -> LLMEndpointConfig:
         return next(self._endpoint_cycle)
 
-    def build_payload(self, messages: list[dict[str, str]]) -> dict[str, Any]:
+    def build_payload(self, messages: list[dict[str, str]], *, model_name: str | None = None) -> dict[str, Any]:
         return {
-            "model": self.config.model_name,
+            "model": model_name or self.config.model_name,
             "messages": messages,
             "temperature": self.config.temperature,
             "top_p": self.config.top_p,
             "top_k": self.config.top_k,
             "max_tokens": self.config.max_tokens,
             "chat_template_kwargs": {"enable_thinking": False},
-            "extra_body": {"chat_template_kwargs": {"enable_thinking": False}},
         }
+
+    @staticmethod
+    def _normalize_endpoint(endpoint: str | LLMEndpointConfig) -> LLMEndpointConfig:
+        if isinstance(endpoint, LLMEndpointConfig):
+            return endpoint
+        return LLMEndpointConfig(base_url=endpoint)
 
     def call(
         self,
@@ -82,21 +101,23 @@ class BaseLLMClient:
         schema: type[BaseModel] | None = None,
     ) -> LLMCallRecord:
         endpoint = self._next_endpoint()
-        payload = self.build_payload(messages)
+        endpoint_url = endpoint.base_url
+        payload_model = endpoint.model or self.config.model_name
+        payload = self.build_payload(messages, model_name=payload_model)
         started = time.perf_counter()
         raw_completion = ""
-        served_model_name = self.config.model_name
+        served_model_name = payload_model
         usage = LLMUsage(source="mock")
         error: LLMError | None = None
         usage_missing = False
 
         try:
-            if self.config.mock_mode or endpoint.startswith("mock://"):
+            if self.config.mock_mode or endpoint_url.startswith("mock://"):
                 raw_completion = self._mock_completion(agent_name, schema)
                 usage = self._estimate_usage(messages, raw_completion, source="mock")
             else:
                 response = self._post_chat_completion(endpoint, payload)
-                served_model_name = str(response.get("model") or self.config.model_name)
+                served_model_name = str(response.get("model") or payload_model)
                 if "qwen3-8b" not in served_model_name.lower():
                     raise ValueError(f"served model is not Qwen3-8B: {served_model_name}")
                 choices = response.get("choices") or []
@@ -142,7 +163,7 @@ class BaseLLMClient:
             sample_id=sample_id,
             method=method,
             agent_name=agent_name,
-            endpoint=endpoint,
+            endpoint=endpoint_url,
             served_model_name=served_model_name,
             prompt=messages,
             request_payload=payload,
@@ -157,15 +178,18 @@ class BaseLLMClient:
             warnings=warnings,
         )
 
-    def _post_chat_completion(self, endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
-        url = endpoint.rstrip("/") + "/v1/chat/completions"
+    def _post_chat_completion(self, endpoint: LLMEndpointConfig, payload: dict[str, Any]) -> dict[str, Any]:
+        base_url = endpoint.base_url.rstrip("/")
+        suffix = "/chat/completions" if base_url.endswith("/v1") else "/v1/chat/completions"
+        url = base_url + suffix
         request = urllib.request.Request(
             url,
             data=json.dumps(payload).encode("utf-8"),
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(request, timeout=self.config.timeout_s) as response:
+        timeout = endpoint.timeout_seconds or self.config.timeout_s
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             return json.loads(response.read().decode("utf-8"))
 
     def _mock_completion(self, agent_name: str, schema: type[BaseModel] | None) -> str:
