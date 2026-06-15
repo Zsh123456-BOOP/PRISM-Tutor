@@ -56,7 +56,7 @@
 - [x] Shard supervisor：`python scripts/11_plan_or_run_shards.py supervise --plan outputs/full_run/shard_plan.json --target-running 18 --interval-seconds 120 --log-path outputs/full_run/logs/shards/supervisor_compact.jsonl`，服务器 PID `2472200`。
 - [x] Full-run finalization gate：`scripts/12_finalize_full_run.py --allow-incomplete --dry-run` 已在服务器真实 shard plan 上验证，默认不调用 judge，计划步骤为 auto metrics、tables、figures、human audit sample、paper artifacts。
 - [x] Shard progress report：`python scripts/11_plan_or_run_shards.py progress --plan outputs/full_run/shard_plan.json --supervisor-log outputs/full_run/logs/shards/supervisor_compact.jsonl --rate-window 5` 已在服务器验证，health summary 当前为 `ok`，并记录 `target_running`。
-- [x] 正式 full_run 后台运行：已完成 32 个 shard，18 个 shard 正在 running；最近检查 generation_rows `3834`、error_rows `0`，近期吞吐约 `85.64` rows/min，粗略 ETA 约 `39.03` hours，GPU2/GPU3 均 100% utilization，health summary 为 `ok`。
+- [x] 正式 full_run 后台运行：已完成 32 个 shard，18 个 shard 正在 running；最近检查 generation_rows `3983`、error_rows `0`，近期吞吐约 `85.64` rows/min，粗略 ETA 约 `39.00` hours，GPU2/GPU3 均 100% utilization，health summary 为 `ok`。
 
 ## 仍需服务器真实执行的项目
 
