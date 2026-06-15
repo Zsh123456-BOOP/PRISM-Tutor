@@ -167,6 +167,8 @@ def build_commands(args: argparse.Namespace) -> list[dict[str, Any]]:
             str(Path(human_audit) / "human_audit_labeled.csv"),
             "--output",
             str(Path(human_audit) / "human_agreement_report.json"),
+            "--preference-mapping",
+            str(Path(human_audit) / "preference_mapping.json"),
         )
         if args.allow_unlabeled_agreement:
             agreement_argv.append("--allow-unlabeled")

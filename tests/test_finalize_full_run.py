@@ -287,4 +287,7 @@ def test_finalize_can_insert_human_agreement_before_paper_artifacts(tmp_path: Pa
     assert agreement_command["argv"][agreement_command["argv"].index("--output") + 1] == str(
         tmp_path / "out" / "human_audit" / "human_agreement_report.json"
     )
+    assert agreement_command["argv"][agreement_command["argv"].index("--preference-mapping") + 1] == str(
+        tmp_path / "out" / "human_audit" / "preference_mapping.json"
+    )
     assert "--allow-unlabeled" in agreement_command["argv"]
