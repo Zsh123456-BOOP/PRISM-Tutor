@@ -50,6 +50,8 @@
 - [x] 全量规模估算：`outputs/exp_matrix_live_smoke/full_run_estimate.json`，约 204,373 generation records、953,088 agent calls、1.6B tokens。
 - [x] Sharded runner dry-run 验证：`outputs/shard_smoke`，2 个 shard 无 sample overlap。
 - [x] Sharded runner live 验证：`outputs/shard_live_smoke`，Exp0 shard0 limit=1，15/15 success，metrics orphan_generation_count `0`。
+- [x] 全量 shard plan：`outputs/full_run/shard_plan.json`，1792 个 job，estimated_records `204373`，初始状态 pending。
+- [x] Shard plan/status/launch 工具验证：`outputs/shard_tool_smoke`，Exp0 8-shard dry-run plan，`launch --next` 后 1 completed / 7 pending，15 generation rows，0 error rows。
 
 ## 仍需服务器真实执行的项目
 
@@ -60,6 +62,7 @@
 - [x] 使用真实 DeepSeek judge API 跑 live smoke judge，并保存 actual model id、日期与 raw response。
 - [x] 用 live smoke raw logs 重新生成 smoke 版 tables、figures、paper artifacts。
 - [x] 提供全量正式实验前的分片执行能力与规模估算 gate。
+- [x] 提供全量正式实验的 shard manifest、status 和 launch 工具：`scripts/11_plan_or_run_shards.py`。
 - [ ] 使用真实 Qwen3-8B endpoint 跑全量 Exp0-Exp6 generation。
 - [ ] 全量实验完成后执行正式 200 条 blind human audit，并填入人工标签后计算 agreement。
 - [ ] 用全量真实 raw logs 重新生成正式论文 tables、figures、paper artifacts。
