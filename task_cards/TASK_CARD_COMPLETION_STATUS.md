@@ -13,7 +13,7 @@
 - [x] 05 Agent schema 与 base client：`prism_tutor/agents/schemas.py`、mock-safe OpenAI-compatible client，支持 endpoint-specific served model name。
 - [x] 06 Agent prompt 与 JSON repair：prompt、`<think>` 剥离、retry/repair parser。
 - [x] 07 Runtime state：`prism_tutor/runtime/` graph state、checkpoint、node interface。
-- [x] 08 Baseline 方法：method registry 覆盖 B0-B5 与实验变体。
+- [x] 08 Baseline 方法：method registry 覆盖 B0-B5 与实验变体；`prism_tutor/baselines/` 提供 Single Tutor、Fixed 2、Fixed 4、Debate、Generic Sparse、Difficulty Routing 与 Oracle Routing planner；runner live baseline 路径会记录 `baseline_plan`，Generic Sparse 与 Difficulty Routing 有禁止读取教育风险字段的 fairness tests。
 - [x] 09 PRISM 模块：risk estimator、QoS router、budget controller、state commit、M1/M2/M3 graph。
 - [x] 10 Runner 与日志：`scripts/02_run_generation.py` 生成 JSONL raw logs 与 manifest，支持 `--live-llm` 真实 vLLM endpoint 调用和 `--num-shards/--shard-index` 样本级分片。
 - [x] 11 自动指标：`scripts/04_compute_metrics.py` 生成 record/aggregate metrics 和 coverage report，并已支持 unified schema gold 字段映射。
@@ -26,7 +26,7 @@
 ## 已验证命令
 
 - [x] 本机 `python -m compileall prism_tutor scripts data serving tests`
-- [x] 本机 `python -m pytest -q`，结果：80 passed。
+- [x] 本机 `python -m pytest -q`，结果：84 passed。
 - [x] 服务器 `python -m pytest -q`，结果：80 passed。
 - [x] `python scripts/00_prepare_env_check.py --config configs/default.yaml --dry-run`
 - [x] `python scripts/01_build_datasets.py --help`

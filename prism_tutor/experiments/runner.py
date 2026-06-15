@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from prism_tutor.agents.base_client import BaseLLMClient, LLMClientConfig, LLMEndpointConfig
+from prism_tutor.baselines import plan_baseline_agents
 from prism_tutor.experiments.experiment_matrix import ExperimentSpec, get_experiment
 from prism_tutor.experiments.method_registry import MethodSpec, default_method_registry
 from prism_tutor.logging.jsonl_logger import JsonlLogger
@@ -359,8 +360,14 @@ def _run_live_prism(sample: dict[str, Any], method: MethodSpec, client: BaseLLMC
 def _run_live_baseline(sample: dict[str, Any], method: MethodSpec, client: BaseLLMClient) -> dict[str, Any]:
     state = TutorGraphState(sample=sample, method=method.name, rounds=method.rounds)
     state.agent_outputs.setdefault("runtime_variant", []).append(method.variant)
-    state.selected_agents.extend(method.selected_agents)
-    for selected_agent in method.selected_agents:
+    baseline_plan = plan_baseline_agents(method.name, sample)
+    planned_agents = baseline_plan.agents or list(method.selected_agents)
+    state.agent_outputs.setdefault("baseline_plan", []).append(baseline_plan.metadata)
+    if not baseline_plan.agents and baseline_plan.metadata.get("skipped"):
+        state.termination_reason = str(baseline_plan.metadata.get("skip_reason", "baseline_skipped"))
+        return _state_to_method_result(state, method=method)
+    state.selected_agents.extend(planned_agents)
+    for selected_agent in planned_agents:
         agent_name = _callable_agent_name(selected_agent)
         if agent_name is None:
             state.agent_outputs.setdefault(selected_agent, []).append({"control_only": True})
