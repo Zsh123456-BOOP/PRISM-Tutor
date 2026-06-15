@@ -93,3 +93,48 @@ def test_auto_metrics_use_unified_schema_gold_fields():
     assert row["misconception_f1"] == 1.0
     assert row["routing_coverage"] == 1.0
     assert row["routing_recall"] > 0
+
+
+def test_parse_failed_records_are_kept_but_structured_metrics_are_missing():
+    generations = [
+        {
+            "sample_id": "s1",
+            "dataset": "mathdial",
+            "split": "test",
+            "method": "ours",
+            "token_usage": {"total_tokens": 11, "source": "api"},
+            "selected_agents": ["solver", "final_tutor"],
+            "rounds": 1,
+            "final_response": "The answer is 42.",
+            "parse_success": False,
+            "state": {"events": [{"type": "conflict"}]},
+        }
+    ]
+    gold = [
+        {
+            "sample_id": "s1",
+            "dataset": "mathdial",
+            "answer": "42",
+            "misconceptions": ["sign"],
+            "required_agents": ["solver", "hint", "final_tutor"],
+        }
+    ]
+
+    result = compute_auto_metrics(generations, gold)
+    row = result["record_metrics"][0]
+    aggregate = result["aggregate_metrics"][0]
+
+    assert result["coverage_report"]["generation_count"] == 1
+    assert result["coverage_report"]["parse_failure_count"] == 1
+    assert row["parse_success"] is False
+    assert row["internal_correctness"] is None
+    assert row["internal_correctness_reason"] == "parse_failed"
+    assert row["misconception_f1"] is None
+    assert row["misconception_reason"] == "parse_failed"
+    assert row["routing_f1"] is not None
+    assert row["state_metric_coverage"] == 1.0
+    assert row["rule_leakage"] is True
+    assert aggregate["n"] == 1
+    assert aggregate["parse_success_rate"] == 0.0
+    assert aggregate["internal_correctness_coverage"] == 0.0
+    assert aggregate["misconception_coverage"] == 0.0

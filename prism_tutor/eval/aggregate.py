@@ -30,6 +30,27 @@ def compute_record_metrics(record: dict[str, Any], gold: dict[str, Any] | None =
     parsed_success = record.get("parse_success")
     if parsed_success is None:
         parsed_success = record.get("error") in (None, "")
+    if parsed_success:
+        correctness_metrics = evaluate_internal_correctness(record, gold)
+        misconception_metrics = evaluate_misconceptions(record, gold)
+    else:
+        correctness_metrics = {
+            "internal_correctness": None,
+            "internal_correctness_numerator": 0,
+            "internal_correctness_denominator": 0,
+            "internal_correctness_coverage": 0.0,
+            "internal_correctness_reason": "parse_failed",
+        }
+        misconception_metrics = {
+            "misconception_precision": None,
+            "misconception_recall": None,
+            "misconception_f1": None,
+            "misconception_tp": 0,
+            "misconception_fp": 0,
+            "misconception_fn": 0,
+            "misconception_coverage": 0.0,
+            "misconception_reason": "parse_failed",
+        }
 
     output = {
         "sample_id": record.get("sample_id"),
@@ -43,8 +64,8 @@ def compute_record_metrics(record: dict[str, Any], gold: dict[str, Any] | None =
         "rounds": int(rounds or 0),
         "latency": float(latency) if isinstance(latency, (int, float)) else None,
         **token_info,
-        **evaluate_internal_correctness(record, gold),
-        **evaluate_misconceptions(record, gold),
+        **correctness_metrics,
+        **misconception_metrics,
         **evaluate_routing(record, gold),
         **evaluate_state_metrics(record),
         "rule_leakage": leakage["rule_leakage"],
@@ -87,6 +108,7 @@ def compute_auto_metrics(
     coverage = {
         "generation_count": len(generation_rows),
         "gold_count": len(gold_index),
+        "parse_failure_count": sum(not bool(row.get("parse_success")) for row in record_metrics),
         "orphan_generation_count": len(orphan_generations),
         "missing_sample_count": len(missing_samples),
         "metrics_with_missing_gold": _missing_gold_counts(record_metrics),
