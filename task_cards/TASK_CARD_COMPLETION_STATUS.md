@@ -55,7 +55,7 @@
 - [x] Sharded runner dry-run 验证：`outputs/shard_smoke`，2 个 shard 无 sample overlap。
 - [x] Sharded runner live 验证：`outputs/shard_live_smoke`，Exp0 shard0 limit=1，15/15 success，metrics orphan_generation_count `0`。
 - [x] 全量 shard plan：`outputs/full_run/shard_plan.json`，1792 个 job，estimated_records `294053`；旧估算已在服务器备份为 `outputs/full_run/shard_plan.pre_exp6_variants_1694d10.json`。
-- [x] 稳定 commit 正式重跑入口：服务器已生成 `outputs/full_run_stable_87f979f/shard_plan.json`，1792 个 job，estimated_records `294053`，`git_freeze.enabled=true`，绑定 clean commit `87f979f9138009fd24a6be7e81a6e2973f4ff9af`，尚未启动。
+- [x] 稳定 commit 正式重跑入口：`scripts/11_plan_or_run_shards.py plan` 默认生成 `git_freeze.enabled=true` 的 shard plan，绑定创建时的 clean commit；正式重跑应在最终代码提交同步后生成新的 run-local plan 并启动。
 - [x] Shard plan/status/launch 工具验证：`outputs/shard_tool_smoke`，Exp0 8-shard dry-run plan，`launch --next` 后 1 completed / 7 pending，15 generation rows，0 error rows；新建 plan 默认写入 `git_freeze`，dirty worktree 或 commit mismatch 会拒绝启动，`--no-git-freeze` / `--allow-dirty-git` 仅用于 smoke。
 - [x] Shard concurrency maintainer：`python scripts/11_plan_or_run_shards.py maintain --plan outputs/full_run/shard_plan.json --target-running 2 --max-launches 2`，当前 running 已达目标时不会重复启动 job。
 - [x] Shard supervisor：`python scripts/11_plan_or_run_shards.py supervise --plan outputs/full_run/shard_plan.json --target-running 18 --interval-seconds 120 --log-path outputs/full_run/logs/shards/supervisor_compact.jsonl`，服务器 PID `2472200`。
@@ -82,7 +82,7 @@
 - [x] 用 live smoke raw logs 重新生成 smoke 版 tables、figures、paper artifacts。
 - [x] 提供全量正式实验前的分片执行能力与规模估算 gate。
 - [x] 提供全量正式实验的 shard manifest、status、launch 和 maintain 工具：`scripts/11_plan_or_run_shards.py`。
-- [ ] 使用真实 Qwen3-8B endpoint 跑完全量 Exp0-Exp6 generation。目前 mixed-commit 长跑已完成 279 个 shard，并由 supervisor/maintainer 维持运行；尚未完成全量 1792 个 job。论文正式结果入口已准备为 `outputs/full_run_stable_87f979f/shard_plan.json`，但尚未启动。
+- [ ] 使用真实 Qwen3-8B endpoint 跑完全量 Exp0-Exp6 generation。目前 mixed-commit 长跑已完成 279 个 shard，并由 supervisor/maintainer 维持运行；尚未完成全量 1792 个 job。论文正式结果应使用最终代码提交后重新生成的 git-frozen run plan，尚未启动。
 - [ ] 全量实验完成后执行正式 200 条 blind human audit，并填入人工标签后计算 agreement。
 - [ ] 用全量真实 raw logs 重新生成正式论文 tables、figures、paper artifacts。
 
