@@ -488,3 +488,66 @@ def test_export_paper_artifacts_populates_manifest_from_shard_plan(tmp_path):
     assert exp0["model"] == manifest["model"]
     assert exp0["generation_config"] == manifest["generation_config"]
     assert exp0["judge_config"] == manifest["judge_config"]
+
+
+def test_export_paper_artifacts_fails_when_shard_plan_omits_configured_experiments(tmp_path):
+    (tmp_path / "configs").mkdir()
+    (tmp_path / "configs" / "default.yaml").write_text(
+        "\n".join(
+            [
+                "model:",
+                "  generator: Qwen/Qwen3-8B",
+                "  enable_thinking: false",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "configs" / "experiments.yaml").write_text(
+        "\n".join(
+            [
+                "experiments:",
+                "  exp0_problem_diagnosis:",
+                "    datasets: [mathdial]",
+                "    split: test",
+                "    methods: [single_tutor]",
+                "  exp1_routing:",
+                "    datasets: [mathdial]",
+                "    split: test",
+                "    methods: [difficulty_routing]",
+                "  exp2_budget:",
+                "    datasets: [mathdial]",
+                "    split: test",
+                "    methods: [single_round]",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    shard_plan = {
+        "experiments_config": "configs/experiments.yaml",
+        "jobs": [
+            {
+                "job_id": "exp0_problem_diagnosis_shard000-of-001",
+                "experiment": "exp0_problem_diagnosis",
+                "datasets": ["mathdial"],
+                "split": "test",
+                "estimated_records": 10,
+                "shard_index": 0,
+                "num_shards": 1,
+                "paths": {},
+            }
+        ],
+    }
+
+    files = export_paper_artifacts(
+        tmp_path,
+        tmp_path / "paper_artifacts",
+        shard_plan=shard_plan,
+        artifact_prefix="outputs/full_run",
+    )
+    manifest = json.loads(files["experiment_manifest"].read_text(encoding="utf-8"))
+    summary = files["experiment_summary"].read_text(encoding="utf-8")
+
+    assert manifest["artifact_status"] == "failed"
+    assert manifest["expected_experiments"] == ["exp0_problem_diagnosis", "exp1_routing", "exp2_budget"]
+    assert manifest["missing_experiments"] == ["exp1_routing", "exp2_budget"]
+    assert "Experiment manifest status: **failed**" in summary

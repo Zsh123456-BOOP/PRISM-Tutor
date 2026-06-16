@@ -100,7 +100,8 @@ def build_experiment_manifest(
         if exp_name:
             by_exp[str(exp_name)] = item
     by_exp = {**plan_experiments, **by_exp}
-    expected = list(plan_experiments) if plan_experiments else [f"exp{i}" for i in range(7)]
+    expected = _expected_experiments_from_shard_plan(root, shard_plan) if shard_plan else []
+    expected = expected or (list(plan_experiments) if plan_experiments else [f"exp{i}" for i in range(7)])
     missing = [exp for exp in expected if exp not in by_exp]
     return {
         "artifact_status": "failed" if missing else "passed",
@@ -159,6 +160,13 @@ def _experiments_from_shard_plan(root: Path, shard_plan: dict[str, Any], run_met
         if not item.get("split"):
             item["split"] = config.get(item["experiment"], {}).get("split")
     return dict(sorted(output.items()))
+
+
+def _expected_experiments_from_shard_plan(root: Path, shard_plan: dict[str, Any] | None) -> list[str]:
+    if not shard_plan:
+        return []
+    config = _load_experiments_config(root, shard_plan.get("experiments_config"))
+    return list(config)
 
 
 def _manifest_run_metadata(root: Path, shard_plan: dict[str, Any] | None) -> dict[str, Any]:

@@ -21,12 +21,12 @@
 - [x] 13 实验矩阵：`configs/experiments.yaml` 与 `scripts/run_exp*.sh`。
 - [x] 14 统计、表格和图：`scripts/05_make_tables.py`、`scripts/06_make_figures.py`；tables/significance 使用合并后的 `final_leakage`、`judge_leakage`、`leakage_conflict`，并能把 Exp6 的 `base__noise...__budget...` 方法变体纳入 robustness 表；table builder 会写出 `table_manifest.json`，正式模式拒绝空任务表或核心比较没有 paired samples，`--allow-incomplete-tables` 仅用于 smoke；figure builder 会在缺少 `internal_correctness`、`total_tokens`、`risk_bucket`、`agent_calls` 或 `state_conflict_rate` 等关键列时 fail-fast，并写出 `figure_manifest.json` 记录每张图的数据摘要。
 - [x] 15 Human audit：`scripts/07_sample_human_audit.py`、`scripts/08_human_agreement.py`；blind audit CSV 不包含 method/selected agents/risk 字段，最终展示顺序由 seed 全局随机化，并在 sampling manifest 记录 display order seed 与 sample id 顺序；formal sampler 要求具体 Table 1-6、`table_manifest.json`、judge scores 和 generation logs 存在，并拒绝缺少 `problem` 或 `candidate_response` 的不可标注 blind rows；sampler 会为同一样本的 ours 与 baseline 生成 A/B blind preference 字段，并把 method 映射单独写入不发给标注者的 `preference_mapping.json`；human agreement 会读取同目录 `preference_mapping.json`，把 `human_preference_ab` 的 A/B/tie 解析为 `ours`/`baseline`/`tie` 后计算 preference win rate，同时保留 candidate A/B rate；正式模式要求 `sample_id`、`annotator_id`、`human_quality_score`、`human_leakage_label`、`human_preference` 核心列，缺列时输出 schema error 并返回非 0；正式 agreement gate 会拒绝空标签、无双标 overlap、preference 缺失或 A/B preference 映射缺失，`--allow-unlabeled` 仅用于 smoke。
-- [x] 16 Paper artifacts：`scripts/09_export_paper_artifacts.py`；paper artifact summary 会在 missing experiments 或 checklist failure 时标记 final artifact status failed，避免 incomplete artifacts 显示为 passed；paper artifact CLI 默认在 final artifact status failed 时返回非 0，只有 `--allow-failed-checklist` 才允许 smoke；显式传入的 `--shard-plan` 缺失或 JSON 损坏会直接失败，避免丢失 full-run traceability；experiment manifest 会记录 config snapshot path/hash、generator model、generation config、judge config 摘要，并把这些参数复制到每个实验条目；artifact index 会逐项列出核心 metrics、Table 1-6、Figure 1-5、human audit 和 judge 文件的状态、来源脚本和输入；formal finalization 会拒绝 generation error rows，并在后处理步骤失败时 fail-fast 而不是继续生成后续 artifact；reproducibility checklist 会要求 judge raw response、完整且非 mock/dry-run 的 judge metadata、`parsed_count == output_rows`、`raw_response_count == output_rows`、`table_manifest.json`、具体 Table 1-6 CSV/TeX、Figure 1-5 PDF、`figure_manifest.json`、`human_audit_blind.csv`、`sampling_manifest.json`、可解析且每行恰好一侧为 ours 的 `preference_mapping.json` 和非空关键文件，并递归扫描 required artifact 目录中的明文 secret。
+- [x] 16 Paper artifacts：`scripts/09_export_paper_artifacts.py`；paper artifact summary 会在 missing experiments 或 checklist failure 时标记 final artifact status failed，避免 incomplete artifacts 显示为 passed；paper artifact CLI 默认在 final artifact status failed 时返回非 0，只有 `--allow-failed-checklist` 才允许 smoke；显式传入的 `--shard-plan` 缺失或 JSON 损坏会直接失败，避免丢失 full-run traceability；experiment manifest 会记录 config snapshot path/hash、generator model、generation config、judge config 摘要，并把这些参数复制到每个实验条目；当 shard plan 指向 `configs/experiments.yaml` 时，manifest 会用配置中声明的完整实验列表作为 expected experiments，避免坏 plan 漏掉 Exp 后仍显示 passed；artifact index 会逐项列出核心 metrics、Table 1-6、Figure 1-5、human audit 和 judge 文件的状态、来源脚本和输入；formal finalization 会拒绝 generation error rows，并在后处理步骤失败时 fail-fast 而不是继续生成后续 artifact；reproducibility checklist 会要求 judge raw response、完整且非 mock/dry-run 的 judge metadata、`parsed_count == output_rows`、`raw_response_count == output_rows`、`table_manifest.json`、具体 Table 1-6 CSV/TeX、Figure 1-5 PDF、`figure_manifest.json`、`human_audit_blind.csv`、`sampling_manifest.json`、可解析且每行恰好一侧为 ours 的 `preference_mapping.json` 和非空关键文件，并递归扫描 required artifact 目录中的明文 secret。
 
 ## 已验证命令
 
 - [x] 本机 `python -m compileall prism_tutor scripts data serving tests`
-- [x] 本机 `python -m pytest -q`，结果：181 passed。
+- [x] 本机 `python -m pytest -q`，结果：182 passed。
 - [x] 服务器 `python -m pytest -q`，结果：181 passed。
 - [x] `python scripts/00_prepare_env_check.py --config configs/default.yaml --dry-run`
 - [x] 服务器 env check dry-run：`CUDA_VISIBLE_DEVICES=2,3 python scripts/00_prepare_env_check.py --config configs/default.yaml --output /tmp/prism_env_check_latest.json --dry-run`，结果 `status=ok`，检测到 4 张 GPU，CUDA_VISIBLE_DEVICES 与配置一致。
@@ -62,11 +62,11 @@
 - [x] Finalization step logs：`scripts/12_finalize_full_run.py` 非 dry-run 时会为每个后处理 step 保存 stdout/stderr，并在 manifest 记录日志路径。
 - [x] Paper artifact run-local path gate：`scripts/09_export_paper_artifacts.py --artifact-prefix outputs/full_run` 可让 reproducibility checklist 和 artifact index 检查 full-run 目录，而不是误查全局 `outputs/*`。
 - [x] Reproducibility checklist coverage：`scripts/09_export_paper_artifacts.py` 导出的 checklist 包含 seed、config、model、GPU、judge metadata、data/log paths、git 和 package versions。
-- [x] Experiment manifest shard-plan coverage：`scripts/09_export_paper_artifacts.py --shard-plan` 可从 full-run shard plan 生成 Exp0-Exp6 manifest 元数据，并过滤无 experiment/name 的旧日志 manifest。
+- [x] Experiment manifest shard-plan coverage：`scripts/09_export_paper_artifacts.py --shard-plan` 可从 full-run shard plan 生成 Exp0-Exp6 manifest 元数据，并过滤无 experiment/name 的旧日志 manifest；expected experiments 以 `configs/experiments.yaml` 完整声明为准，坏 plan 漏实验会让 artifact manifest failed。
 - [x] Table export coverage：`scripts/05_make_tables.py` 可自动生成 `table1_main_results` 至 `table6_robustness` 的 CSV/TeX，并写出 paired significance JSON。
 - [x] Exp5/Exp6 runtime variant coverage：Exp5 ablation 会真实禁用 risk estimator、QoS routing、budget controller、state commit 或对应风险项；Exp6 dry-run smoke 验证 `fixed_4/debate/generic_sparse/ours_full × noise{0.2,0.4} × budget{1000,2000,4000}` 展开为 24 个 method variants。
 - [x] Shard progress report：`python scripts/11_plan_or_run_shards.py progress --plan outputs/full_run/shard_plan.json --supervisor-log outputs/full_run/logs/shards/supervisor_compact.jsonl --rate-window 5` 已在服务器验证，health summary 当前为 `ok`，并记录 `target_running`。
-- [x] 正式 full_run 后台运行：已完成 213 个 shard，18 个 shard 正在 running；最新 generation_rows `19861`、error_rows `0`，estimated_records `294053`，completion_fraction `0.06754224578562368`；recent_rows_per_minute `69.99971938217267`，ETA 约 `65.28407123629852` 小时；health summary 为 `ok`。
+- [x] 正式 full_run 后台运行：已完成 213 个 shard，18 个 shard 正在 running；最新 generation_rows `19950`、error_rows `0`，estimated_records `294053`，completion_fraction `0.06784491231172611`；recent_rows_per_minute `69.89475908388133`，ETA 约 `65.3608853254759` 小时；health summary 为 `ok`。
 
 ## 仍需服务器真实执行的项目
 
@@ -78,7 +78,7 @@
 - [x] 用 live smoke raw logs 重新生成 smoke 版 tables、figures、paper artifacts。
 - [x] 提供全量正式实验前的分片执行能力与规模估算 gate。
 - [x] 提供全量正式实验的 shard manifest、status、launch 和 maintain 工具：`scripts/11_plan_or_run_shards.py`。
-- [ ] 使用真实 Qwen3-8B endpoint 跑完全量 Exp0-Exp6 generation。目前已完成 Exp0 前 195 个 shard，并由 supervisor/maintainer 维持运行；尚未完成全量 1792 个 job。
+- [ ] 使用真实 Qwen3-8B endpoint 跑完全量 Exp0-Exp6 generation。目前已完成 213 个 shard，并由 supervisor/maintainer 维持运行；尚未完成全量 1792 个 job。
 - [ ] 全量实验完成后执行正式 200 条 blind human audit，并填入人工标签后计算 agreement。
 - [ ] 用全量真实 raw logs 重新生成正式论文 tables、figures、paper artifacts。
 
