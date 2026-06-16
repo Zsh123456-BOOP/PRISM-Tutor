@@ -276,6 +276,52 @@ def test_failed_judge_row_does_not_count_as_leakage_coverage():
     assert aggregate["final_leakage_rate"] == 0.0
 
 
+def test_judge_duplicates_prefer_valid_recovery_row_for_metrics():
+    generations = [
+        {
+            "sample_id": "s1",
+            "dataset": "mathdial",
+            "split": "test",
+            "method": "ours",
+            "token_usage": {"total_tokens": 5, "source": "api"},
+            "selected_agents": ["final_tutor"],
+            "rounds": 1,
+            "final_response": "Try one more intermediate step.",
+            "parse_success": True,
+        }
+    ]
+    gold = [{"sample_id": "s1", "dataset": "mathdial", "answer": "42"}]
+    judge = [
+        {
+            "sample_id": "s1",
+            "dataset": "mathdial",
+            "method": "ours",
+            "parsed_score": None,
+            "error": "timeout",
+        },
+        {
+            "sample_id": "s1",
+            "dataset": "mathdial",
+            "method": "ours",
+            "parsed_score": {"answer_leakage": True},
+        },
+    ]
+
+    result = compute_auto_metrics(generations, gold, judge)
+    row = result["record_metrics"][0]
+    coverage = result["coverage_report"]
+
+    assert row["judge_leakage"] is True
+    assert row["judge_parse_success"] is True
+    assert coverage["raw_judge_count"] == 2
+    assert coverage["judge_count"] == 1
+    assert coverage["duplicate_judge_count"] == 1
+    assert coverage["duplicate_judge_key_count"] == 1
+    assert coverage["replaced_invalid_with_valid_judge_count"] == 1
+    assert coverage["judge_invalid_count"] == 0
+    assert coverage["judge_matched_count"] == 1
+
+
 def test_orphan_judge_rows_are_reported_when_method_does_not_match_generation():
     generations = [
         {

@@ -8,6 +8,7 @@ from typing import Any
 
 from .correctness import evaluate_internal_correctness
 from .generation_records import deduplicate_generation_rows
+from .judge_records import deduplicate_judge_rows, judge_row_is_valid
 from .judge_merge import merge_leakage
 from .leakage_detector import detect_leakage
 from .misconception_metrics import evaluate_misconceptions
@@ -40,9 +41,7 @@ def _build_judge_index(judge_rows: list[dict[str, Any]] | None) -> dict[tuple[st
 
 
 def _valid_judge_row(judge_row: dict[str, Any] | None) -> bool:
-    if not isinstance(judge_row, dict):
-        return False
-    return isinstance(judge_row.get("parsed_score"), dict) and not judge_row.get("error")
+    return judge_row_is_valid(judge_row)
 
 
 def compute_record_metrics(
@@ -136,6 +135,7 @@ def compute_auto_metrics(
     judge_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     generation_rows, deduplication_report = deduplicate_generation_rows(generation_rows)
+    judge_rows, judge_deduplication_report = deduplicate_judge_rows(judge_rows or [])
     gold_index = {_key(row): row for row in gold_rows or []}
     judge_index = _build_judge_index(judge_rows)
     record_metrics: list[dict[str, Any]] = []
@@ -152,7 +152,7 @@ def compute_auto_metrics(
             orphan_generations.append({"dataset": key[0], "sample_id": key[1], "method": record.get("method")})
         record_metrics.append(compute_record_metrics(record, gold, _judge_for_record(record, judge_index)))
 
-    orphan_judges = _orphan_judge_rows(judge_rows or [], seen_keys, seen_method_keys)
+    orphan_judges = _orphan_judge_rows(judge_rows, seen_keys, seen_method_keys)
     missing_samples = [
         {"dataset": dataset, "sample_id": sample_id}
         for dataset, sample_id in sorted(set(gold_index) - seen_keys)
@@ -170,7 +170,7 @@ def compute_auto_metrics(
         "generation_count": len(generation_rows),
         **deduplication_report,
         "gold_count": len(gold_index),
-        "judge_count": len(judge_rows or []),
+        **judge_deduplication_report,
         "judge_matched_count": sum(row.get("judge_leakage_coverage") == 1.0 for row in record_metrics),
         "judge_invalid_count": sum(row.get("judge_parse_success") is False for row in record_metrics),
         "orphan_judge_count": len(orphan_judges),
