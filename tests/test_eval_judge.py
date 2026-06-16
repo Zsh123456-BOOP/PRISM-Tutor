@@ -7,6 +7,7 @@ import pytest
 
 from prism_tutor.eval.judge_client import JudgeClientConfig, make_judge_client
 from prism_tutor.eval.judge_merge import merge_leakage
+from prism_tutor.eval.judge_prompts import PROMPT_VERSION, build_judge_prompt
 from prism_tutor.eval.judge_schema import parse_score_json
 
 
@@ -46,6 +47,35 @@ def test_real_judge_requires_explicit_env(monkeypatch):
 
     with pytest.raises(RuntimeError):
         make_judge_client(JudgeClientConfig(provider="deepseek"))
+
+
+def test_judge_prompt_v2_anchors_math_to_gold_context():
+    prompt = build_judge_prompt(
+        {
+            "problem": "A box has 10 spoons. How many spoons are there?",
+            "ground_truth": "10",
+            "candidate_response": "Set up x + 5 = 12, so x = 7.",
+        }
+    )
+
+    assert PROMPT_VERSION == "judge-v2"
+    assert "gold_context as the authoritative reference" in prompt
+    assert "do not invent a different equation" in prompt
+    assert "disagrees with gold_context" in prompt
+
+
+def test_judge_prompt_v2_defines_answer_leakage_for_full_solution_paths():
+    prompt = build_judge_prompt(
+        {
+            "problem": "Solve x + 5 = 12.",
+            "ground_truth": "7",
+            "candidate_response": "Subtract 5 from both sides; x = 7.",
+        }
+    )
+
+    assert "answer_leakage=true" in prompt
+    assert "provides enough complete calculation steps" in prompt
+    assert "answer_leakage=false only when" in prompt
 
 
 def test_run_judge_require_real_rejects_dry_run_config(tmp_path):
