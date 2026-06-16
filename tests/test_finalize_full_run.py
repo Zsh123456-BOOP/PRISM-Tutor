@@ -31,8 +31,8 @@ def _write_plan(
         if status == "completed":
             generation_path.write_text(json.dumps({"sample_id": job_id}) + "\n", encoding="utf-8")
             manifest = {"status": "completed", "run": {"counts": {"succeeded": 1}}}
-            if commits and index < len(commits):
-                commit = commits[index]
+            commit = commits[index] if commits is not None and index < len(commits) else "abc123"
+            if commit is not None:
                 manifest["reproducibility"] = {"git": {"commit": commit, "dirty": False}}
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
         if index in error_jobs:
@@ -139,7 +139,7 @@ def test_finalize_formal_human_agreement_requires_labeled_csv(tmp_path: Path) ->
 
 
 def test_finalize_formal_requires_judge_source_before_downstream_steps(tmp_path: Path) -> None:
-    plan = _write_plan(tmp_path, ["completed"])
+    plan = _write_plan(tmp_path, ["completed"], commits=["abc123"])
     output_dir = tmp_path / "out"
 
     try:
@@ -179,7 +179,7 @@ def test_finalize_formal_requires_judge_source_before_downstream_steps(tmp_path:
 
 
 def test_finalize_formal_run_judge_satisfies_judge_source_gate(tmp_path: Path) -> None:
-    plan = _write_plan(tmp_path, ["completed"])
+    plan = _write_plan(tmp_path, ["completed"], commits=["abc123"])
 
     rc = finalize.main(
         [
@@ -190,6 +190,44 @@ def test_finalize_formal_run_judge_satisfies_judge_source_gate(tmp_path: Path) -
             "--manifest",
             str(tmp_path / "manifest.json"),
             "--run-judge",
+            "--dry-run",
+        ]
+    )
+
+    assert rc == 0
+
+
+def test_finalize_formal_refuses_mixed_generation_commits_without_override(tmp_path: Path) -> None:
+    plan = _write_plan(tmp_path, ["completed", "completed"], commits=["abc123", "def456"])
+
+    try:
+        finalize.main(
+            [
+                "--plan",
+                str(plan),
+                "--output-dir",
+                str(tmp_path / "out"),
+                "--manifest",
+                str(tmp_path / "manifest.json"),
+                "--run-judge",
+                "--dry-run",
+            ]
+        )
+    except SystemExit as exc:
+        assert "mixed_generation_commits" in str(exc)
+    else:
+        raise AssertionError("Expected formal finalization with mixed generation commits to fail")
+
+    rc = finalize.main(
+        [
+            "--plan",
+            str(plan),
+            "--output-dir",
+            str(tmp_path / "out"),
+            "--manifest",
+            str(tmp_path / "manifest.json"),
+            "--run-judge",
+            "--allow-mixed-generation-commits",
             "--dry-run",
         ]
     )

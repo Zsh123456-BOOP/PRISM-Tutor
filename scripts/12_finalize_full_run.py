@@ -118,6 +118,32 @@ def _require_formal_flag_consistency(args: argparse.Namespace) -> None:
         )
 
 
+def _require_generation_manifest_git_consistency(summary: dict[str, Any], args: argparse.Namespace) -> None:
+    if args.allow_incomplete:
+        return
+    failures = []
+    if int(summary.get("missing_manifest_count") or 0):
+        failures.append({"reason": "missing_generation_manifests", "count": summary["missing_manifest_count"]})
+    if int(summary.get("invalid_manifest_count") or 0):
+        failures.append({"reason": "invalid_generation_manifests", "count": summary["invalid_manifest_count"]})
+    if int(summary.get("missing_commit_count") or 0):
+        failures.append({"reason": "missing_generation_commit", "count": summary["missing_commit_count"]})
+    if int(summary.get("dirty_manifest_count") or 0):
+        failures.append({"reason": "dirty_generation_manifest", "count": summary["dirty_manifest_count"]})
+    if int(summary.get("distinct_commit_count") or 0) > 1 and not args.allow_mixed_generation_commits:
+        failures.append(
+            {
+                "reason": "mixed_generation_commits",
+                "distinct_commit_count": summary["distinct_commit_count"],
+            }
+        )
+    if failures:
+        raise SystemExit(
+            "Formal finalization requires clean generation manifest git provenance: "
+            + json.dumps(failures, ensure_ascii=False, sort_keys=True)
+        )
+
+
 def _require_human_agreement_inputs(args: argparse.Namespace) -> None:
     if not args.run_human_agreement or args.allow_unlabeled_agreement:
         return
@@ -340,6 +366,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--allow-mock-judge", action="store_true", help="Allow mock/dry-run judge in finalization. Use only for smoke checks.")
     parser.add_argument("--run-human-agreement", action="store_true", help="Compute agreement after labeled human audit CSV exists.")
     parser.add_argument("--allow-unlabeled-agreement", action="store_true", help="Allow agreement smoke from blind CSV when labels are not filled.")
+    parser.add_argument(
+        "--allow-mixed-generation-commits",
+        action="store_true",
+        help="Allow formal finalization when completed shard manifests record multiple git commits. Requires explicit provenance review.",
+    )
     parser.add_argument("--allow-incomplete", action="store_true", help="Allow smoke finalization before all shards complete.")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--manifest", default="outputs/full_run/finalization_manifest.json")
@@ -349,6 +380,7 @@ def main(argv: list[str] | None = None) -> int:
     summary = _status_summary(args.plan)
     generation_manifest_git = _generation_manifest_git_summary(args.plan)
     _require_complete(summary, args.allow_incomplete)
+    _require_generation_manifest_git_consistency(generation_manifest_git, args)
     _require_formal_flag_consistency(args)
     _require_human_agreement_inputs(args)
     _require_formal_judge_source(args)
@@ -366,6 +398,7 @@ def main(argv: list[str] | None = None) -> int:
         "allow_mock_judge": args.allow_mock_judge,
         "run_human_agreement": args.run_human_agreement,
         "allow_unlabeled_agreement": args.allow_unlabeled_agreement,
+        "allow_mixed_generation_commits": args.allow_mixed_generation_commits,
         "invocation": _invocation_metadata(args, argv),
         "reproducibility": collect_reproducibility_metadata(),
         "generation_manifest_git": generation_manifest_git,
@@ -389,6 +422,7 @@ def main(argv: list[str] | None = None) -> int:
                 "run_judge": args.run_judge,
                 "run_human_agreement": args.run_human_agreement,
                 "allow_unlabeled_agreement": args.allow_unlabeled_agreement,
+                "allow_mixed_generation_commits": args.allow_mixed_generation_commits,
                 "allow_incomplete": args.allow_incomplete,
                 "dry_run": args.dry_run,
             },
