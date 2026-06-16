@@ -27,8 +27,7 @@
 
 - [x] 本机 `python -m compileall prism_tutor scripts data serving tests`
 - [x] 本机 `python -m pytest -q`，结果：200 passed。
-- [x] 服务器 `python -m pytest -q`，结果：198 passed。
-- [x] 服务器 `python -m pytest -q`，结果：192 passed。
+- [x] 服务器 `python -m pytest -q`，结果：200 passed。
 - [x] `python scripts/00_prepare_env_check.py --config configs/default.yaml --dry-run`
 - [x] 服务器 env check dry-run：`CUDA_VISIBLE_DEVICES=2,3 python scripts/00_prepare_env_check.py --config configs/default.yaml --output /tmp/prism_env_check_latest.json --dry-run`，结果 `status=ok`，检测到 4 张 GPU，CUDA_VISIBLE_DEVICES 与配置一致。
 - [x] `python scripts/01_build_datasets.py --help`
@@ -70,7 +69,7 @@
 - [x] Exp5/Exp6 runtime variant coverage：Exp5 ablation 会真实禁用 risk estimator、QoS routing、budget controller、state commit 或对应风险项；Exp6 dry-run smoke 验证 `fixed_4/debate/generic_sparse/ours_full × noise{0.2,0.4} × budget{1000,2000,4000}` 展开为 24 个 method variants。
 - [x] Shard progress report：`python scripts/11_plan_or_run_shards.py progress --plan outputs/full_run/shard_plan.json --supervisor-log outputs/full_run/logs/shards/supervisor_compact.jsonl --rate-window 5` 已在服务器验证，health summary 当前为 `ok`，记录 `target_running`，并会提示 running 高于或低于目标并发；status report 会保留 `raw_error_rows`，但 formal gate 使用 unresolved `error_rows`。
 - [x] Partial full-run metrics dedupe check：服务器当前 partial logs 临时计算自动指标时，raw_generation_count `23693` 去重为 generation_count `23403`，duplicate_generation_count `290`，orphan_generation_count `0`；该检查未调用 judge/API。
-- [x] 当前 mixed-commit full_run 后台运行：已完成 279 个 shard，18 个 shard 正在 running；最新 generation_rows `25887`、error_rows `0`、raw_error_rows `79`，estimated_records `294053`，completion_fraction `0.08803515012599769`；recent_rows_per_minute `76.39997155249146`，ETA 约 `58.500458082795994` 小时；health summary 为 `ok`。
+- [x] 当前 mixed-commit full_run 后台运行：已完成 285 个 shard，18 个 shard 正在 running；最新 generation_rows `26429`、error_rows `0`、raw_error_rows `79`，estimated_records `294053`，completion_fraction `0.08987835526248669`；recent_rows_per_minute `78.3192702215497`，ETA 约 `56.95150104670807` 小时；health summary 为 `ok`。
 
 ## 仍需服务器真实执行的项目
 
@@ -82,7 +81,7 @@
 - [x] 用 live smoke raw logs 重新生成 smoke 版 tables、figures、paper artifacts。
 - [x] 提供全量正式实验前的分片执行能力与规模估算 gate。
 - [x] 提供全量正式实验的 shard manifest、status、launch 和 maintain 工具：`scripts/11_plan_or_run_shards.py`。
-- [ ] 使用真实 Qwen3-8B endpoint 跑完全量 Exp0-Exp6 generation。目前 mixed-commit 长跑已完成 279 个 shard，并由 supervisor/maintainer 维持运行；尚未完成全量 1792 个 job。论文正式结果应使用最终代码提交后重新生成的 git-frozen run plan，尚未启动。
+- [ ] 使用真实 Qwen3-8B endpoint 跑完全量 Exp0-Exp6 generation。目前 mixed-commit 长跑已完成 285 个 shard，并由 supervisor/maintainer 维持运行；尚未完成全量 1792 个 job。论文正式结果应使用最终代码提交后重新生成的 git-frozen run plan，尚未启动。
 - [ ] 全量实验完成后执行正式 200 条 blind human audit，并填入人工标签后计算 agreement。
 - [ ] 用全量真实 raw logs 重新生成正式论文 tables、figures、paper artifacts。
 
