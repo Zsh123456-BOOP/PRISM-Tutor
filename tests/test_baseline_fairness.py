@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from prism_tutor.agents.base_client import BaseLLMClient
-from prism_tutor.baselines.strategies import difficulty_routing_plan, generic_sparse_plan
+from prism_tutor.baselines.strategies import difficulty_routing_plan, generic_sparse_plan, oracle_routing_plan
 from prism_tutor.experiments.method_registry import default_method_registry
 from prism_tutor.experiments.runner import RunnerOptions, _run_live_baseline, run_generation
 
@@ -48,6 +48,20 @@ def test_difficulty_routing_does_not_read_misconception_leakage_or_state_risk() 
     }
 
     assert difficulty_routing_plan(sample).agents == difficulty_routing_plan(with_forbidden_fields).agents
+
+
+def test_oracle_routing_handles_list_valued_gold_fields() -> None:
+    sample = {
+        "sample_id": "s1",
+        "problem": "Explain the student error.",
+        "misconception_label": ["ratio_confusion"],
+    }
+
+    plan = oracle_routing_plan(sample)
+
+    assert plan.metadata["strategy"] == "oracle_routing"
+    assert plan.metadata["upper_bound"] is True
+    assert "misconception" in plan.agents
 
 
 def test_baseline_dry_run_keeps_model_generation_config_and_samples_aligned(tmp_path: Path) -> None:

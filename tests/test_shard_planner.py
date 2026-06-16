@@ -161,6 +161,50 @@ def test_status_report_marks_running_pid(tmp_path: Path) -> None:
     assert report["jobs"][0]["pid_running"] is True
 
 
+def test_status_report_counts_only_unresolved_error_rows(tmp_path: Path) -> None:
+    generations = tmp_path / "generations.jsonl"
+    errors = tmp_path / "errors.jsonl"
+    _write_jsonl(
+        generations,
+        [
+            {"sample_id": "s1", "dataset": "bridge", "split": "test", "method": "oracle_routing", "status": "failed"},
+            {"sample_id": "s1", "dataset": "bridge", "split": "test", "method": "oracle_routing", "status": "success"},
+            {"sample_id": "s2", "dataset": "bridge", "split": "test", "method": "oracle_routing", "status": "success"},
+        ],
+    )
+    _write_jsonl(
+        errors,
+        [
+            {"sample_id": "s1", "dataset": "bridge", "split": "test", "method": "oracle_routing", "status": "failed"},
+            {"sample_id": "s3", "dataset": "bridge", "split": "test", "method": "oracle_routing", "status": "failed"},
+        ],
+    )
+    (tmp_path / "manifest.json").write_text(json.dumps({"status": "completed"}), encoding="utf-8")
+    plan = {
+        "jobs": [
+            {
+                "job_id": "job0",
+                "experiment": "exp1",
+                "shard_index": 0,
+                "num_shards": 1,
+                "estimated_records": 3,
+                "paths": {
+                    "generations": str(generations),
+                    "errors": str(errors),
+                    "manifest": str(tmp_path / "manifest.json"),
+                },
+            }
+        ]
+    }
+
+    report = shard_planner.status_report(plan)
+
+    assert report["raw_error_rows"] == 2
+    assert report["error_rows"] == 1
+    assert report["jobs"][0]["raw_error_rows"] == 2
+    assert report["jobs"][0]["error_rows"] == 1
+
+
 def test_launch_jobs_selects_distinct_next_jobs(monkeypatch) -> None:
     launched = []
     plan = {"jobs": [{"job_id": "a", "argv": ["echo", "a"], "paths": {}}, {"job_id": "b", "argv": ["echo", "b"], "paths": {}}]}

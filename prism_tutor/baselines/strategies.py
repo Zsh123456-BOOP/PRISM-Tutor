@@ -103,9 +103,17 @@ def difficulty_routing_plan(sample: dict[str, Any]) -> BaselinePlan:
     return BaselinePlan(agents, {"strategy": "difficulty_routing", "difficulty_score": score, "difficulty_bucket": bucket})
 
 
+def _has_value(value: Any) -> bool:
+    if value is None or value == "":
+        return False
+    if isinstance(value, (list, tuple, set, dict)):
+        return bool(value)
+    return True
+
+
 def oracle_routing_plan(sample: dict[str, Any]) -> BaselinePlan:
     has_gold = any(
-        sample.get(key) not in {None, "", []}
+        _has_value(sample.get(key))
         for key in ("gold_answer", "gold_misconception", "misconception_label", "teacher_response")
     )
     if not has_gold:
