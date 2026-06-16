@@ -39,6 +39,42 @@ def _status_summary(plan_path: str | Path) -> dict[str, Any]:
     }
 
 
+def _generation_manifest_git_summary(plan_path: str | Path) -> dict[str, Any]:
+    plan = shard_planner.load_plan(plan_path)
+    commit_counts: dict[str, int] = {}
+    dirty_count = 0
+    missing_manifest_count = 0
+    invalid_manifest_count = 0
+    missing_commit_count = 0
+    for job in plan.get("jobs", []):
+        manifest_path = Path(job.get("paths", {}).get("manifest", ""))
+        if not manifest_path.exists():
+            missing_manifest_count += 1
+            continue
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            invalid_manifest_count += 1
+            continue
+        git = manifest.get("reproducibility", {}).get("git", {})
+        commit = git.get("commit")
+        if commit:
+            commit_counts[str(commit)] = commit_counts.get(str(commit), 0) + 1
+        else:
+            missing_commit_count += 1
+        if git.get("dirty"):
+            dirty_count += 1
+    return {
+        "manifest_count": sum(commit_counts.values()) + missing_commit_count,
+        "commit_counts": commit_counts,
+        "distinct_commit_count": len(commit_counts),
+        "dirty_manifest_count": dirty_count,
+        "missing_manifest_count": missing_manifest_count,
+        "invalid_manifest_count": invalid_manifest_count,
+        "missing_commit_count": missing_commit_count,
+    }
+
+
 def _require_complete(summary: dict[str, Any], allow_incomplete: bool) -> None:
     incomplete = summary["by_status"].copy()
     completed = int(incomplete.pop("completed", 0))
@@ -311,6 +347,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     summary = _status_summary(args.plan)
+    generation_manifest_git = _generation_manifest_git_summary(args.plan)
     _require_complete(summary, args.allow_incomplete)
     _require_formal_flag_consistency(args)
     _require_human_agreement_inputs(args)
@@ -331,6 +368,7 @@ def main(argv: list[str] | None = None) -> int:
         "allow_unlabeled_agreement": args.allow_unlabeled_agreement,
         "invocation": _invocation_metadata(args, argv),
         "reproducibility": collect_reproducibility_metadata(),
+        "generation_manifest_git": generation_manifest_git,
         "shard_status": summary,
         **completion,
         "planned_steps": planned_steps,

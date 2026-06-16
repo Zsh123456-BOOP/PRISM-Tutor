@@ -14,7 +14,13 @@ assert SPEC and SPEC.loader
 SPEC.loader.exec_module(finalize)
 
 
-def _write_plan(tmp_path: Path, statuses: list[str], *, error_jobs: set[int] | None = None) -> Path:
+def _write_plan(
+    tmp_path: Path,
+    statuses: list[str],
+    *,
+    error_jobs: set[int] | None = None,
+    commits: list[str | None] | None = None,
+) -> Path:
     error_jobs = error_jobs or set()
     jobs = []
     for index, status in enumerate(statuses):
@@ -24,7 +30,11 @@ def _write_plan(tmp_path: Path, statuses: list[str], *, error_jobs: set[int] | N
         error_path = tmp_path / f"{job_id}.errors.jsonl"
         if status == "completed":
             generation_path.write_text(json.dumps({"sample_id": job_id}) + "\n", encoding="utf-8")
-            manifest_path.write_text(json.dumps({"status": "completed", "run": {"counts": {"succeeded": 1}}}), encoding="utf-8")
+            manifest = {"status": "completed", "run": {"counts": {"succeeded": 1}}}
+            if commits and index < len(commits):
+                commit = commits[index]
+                manifest["reproducibility"] = {"git": {"commit": commit, "dirty": False}}
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
         if index in error_jobs:
             error_path.write_text(json.dumps({"sample_id": job_id, "error": "boom"}) + "\n", encoding="utf-8")
         jobs.append(
@@ -188,7 +198,7 @@ def test_finalize_formal_run_judge_satisfies_judge_source_gate(tmp_path: Path) -
 
 
 def test_finalize_dry_run_writes_planned_manifest(tmp_path: Path) -> None:
-    plan = _write_plan(tmp_path, ["completed", "pending"])
+    plan = _write_plan(tmp_path, ["completed", "pending"], commits=["abc123"])
     manifest = tmp_path / "manifest.json"
 
     rc = finalize.main(
@@ -243,6 +253,20 @@ def test_finalize_dry_run_writes_planned_manifest(tmp_path: Path) -> None:
     assert payload["reproducibility"]["python_executable"]
     assert "git" in payload["reproducibility"]
     assert "package_versions" in payload["reproducibility"]
+    assert payload["generation_manifest_git"]["commit_counts"] == {"abc123": 1}
+    assert payload["generation_manifest_git"]["missing_manifest_count"] == 1
+
+
+def test_finalize_manifest_git_summary_reports_mixed_generation_commits(tmp_path: Path) -> None:
+    plan = _write_plan(tmp_path, ["completed", "completed", "completed"], commits=["abc123", "def456", None])
+
+    summary = finalize._generation_manifest_git_summary(plan)
+
+    assert summary["manifest_count"] == 3
+    assert summary["commit_counts"] == {"abc123": 1, "def456": 1}
+    assert summary["distinct_commit_count"] == 2
+    assert summary["missing_manifest_count"] == 0
+    assert summary["missing_commit_count"] == 1
 
 
 def test_finalize_run_command_preserves_stdout_stderr_logs(tmp_path: Path) -> None:
