@@ -51,7 +51,12 @@ def compute_record_metrics(
 ) -> dict[str, Any]:
     gold = gold or {}
     token_info = record_token_count(record)
-    latency = record.get("latency") or record.get("latency_s") or record.get("elapsed_seconds")
+    latency = (
+        record.get("latency")
+        or record.get("latency_seconds")
+        or record.get("latency_s")
+        or record.get("elapsed_seconds")
+    )
     rounds = record.get("rounds")
     if isinstance(rounds, list):
         rounds = len(rounds)

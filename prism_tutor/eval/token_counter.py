@@ -34,7 +34,10 @@ def usage_total_tokens(usage: dict[str, Any] | None) -> tuple[int, str]:
 
 
 def record_token_count(record: dict[str, Any]) -> dict[str, Any]:
-    total, source = usage_total_tokens(record.get("usage"))
+    usage = record.get("usage")
+    if not isinstance(usage, dict):
+        usage = record.get("token_usage")
+    total, source = usage_total_tokens(usage)
     if total:
         return {"total_tokens": total, "token_source": source}
 
@@ -52,6 +55,8 @@ def record_token_count(record: dict[str, Any]) -> dict[str, Any]:
 
 def count_agent_calls(record: dict[str, Any]) -> int:
     calls = record.get("agent_calls")
+    if isinstance(calls, (int, float)):
+        return int(calls)
     if isinstance(calls, list):
         return len(calls)
     messages = record.get("messages")

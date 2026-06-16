@@ -95,6 +95,51 @@ def test_auto_metrics_use_unified_schema_gold_fields():
     assert row["routing_recall"] > 0
 
 
+def test_auto_metrics_read_live_generation_accounting_fields():
+    generations = [
+        {
+            "sample_id": "s1",
+            "dataset": "mathdial",
+            "split": "test",
+            "method": "fixed_2",
+            "token_usage": {"prompt_tokens": 30, "completion_tokens": 12, "total_tokens": 42},
+            "agent_calls": 3,
+            "rounds": 2,
+            "latency_seconds": 7.5,
+            "final_response": "Try checking the intermediate quantity first.",
+            "parse_success": True,
+        },
+        {
+            "sample_id": "s2",
+            "dataset": "mathdial",
+            "split": "test",
+            "method": "fixed_2",
+            "token_usage": {"prompt_tokens": 20, "completion_tokens": 10, "total_tokens": 30},
+            "agent_calls": 3,
+            "rounds": 2,
+            "latency_seconds": 8.5,
+            "final_response": "What operation should come before simplifying?",
+            "parse_success": True,
+        },
+    ]
+    gold = [
+        {"sample_id": "s1", "dataset": "mathdial"},
+        {"sample_id": "s2", "dataset": "mathdial"},
+    ]
+
+    result = compute_auto_metrics(generations, gold)
+    rows = result["record_metrics"]
+    aggregate = result["aggregate_metrics"][0]
+
+    assert [row["total_tokens"] for row in rows] == [42, 30]
+    assert [row["token_source"] for row in rows] == ["usage.total_tokens", "usage.total_tokens"]
+    assert [row["agent_calls"] for row in rows] == [3, 3]
+    assert [row["latency"] for row in rows] == [7.5, 8.5]
+    assert aggregate["total_tokens_mean"] == 36
+    assert aggregate["agent_calls_mean"] == 3
+    assert aggregate["latency_mean"] == 8.0
+
+
 def test_parse_failed_records_are_kept_but_structured_metrics_are_missing():
     generations = [
         {
