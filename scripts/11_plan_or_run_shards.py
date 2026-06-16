@@ -386,9 +386,13 @@ def _health_summary(summary: dict[str, Any], rate_rows_per_minute: float | None,
         issues.append("non_terminal_bad_status")
         recommendations.append("inspect stale/partial/invalid jobs before launching more shards")
     running = int(by_status.get("running") or 0)
+    pending = int(by_status.get("pending") or 0)
     if target_running is not None and running > target_running:
         issues.append("running_above_target")
         recommendations.append("wait for running jobs to finish before calling maintain again")
+    if target_running is not None and pending > 0 and running < target_running:
+        issues.append("running_below_target")
+        recommendations.append("call maintain to launch additional shards up to target_running")
     if rate_rows_per_minute == 0:
         issues.append("no_recent_progress")
         recommendations.append("check vLLM health, GPU utilization, and running shard stdout logs")

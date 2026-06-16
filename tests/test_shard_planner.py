@@ -433,3 +433,59 @@ def test_progress_report_warns_when_running_above_target(tmp_path: Path) -> None
     assert report["health"]["status"] == "warn"
     assert "running_above_target" in report["health"]["issues"]
     assert report["health"]["target_running"] == 2
+
+
+def test_progress_report_warns_when_running_below_target_with_pending_jobs(tmp_path: Path) -> None:
+    plan = {
+        "output_dir": str(tmp_path / "out"),
+        "jobs": [],
+    }
+    generation_path = tmp_path / "running.jsonl"
+    pid_path = tmp_path / "running.pid"
+    _write_jsonl(generation_path, [{"sample_id": "a"}])
+    pid_path.write_text(str(os.getpid()), encoding="utf-8")
+    plan["jobs"].append(
+        {
+            "job_id": "running",
+            "experiment": "exp0",
+            "shard_index": 0,
+            "num_shards": 2,
+            "estimated_records": 2,
+            "paths": {
+                "generations": str(generation_path),
+                "errors": str(tmp_path / "running_errors.jsonl"),
+                "manifest": str(tmp_path / "running_manifest.json"),
+                "pid": str(pid_path),
+            },
+        }
+    )
+    plan["jobs"].append(
+        {
+            "job_id": "pending",
+            "experiment": "exp0",
+            "shard_index": 1,
+            "num_shards": 2,
+            "estimated_records": 2,
+            "paths": {
+                "generations": str(tmp_path / "pending.jsonl"),
+                "errors": str(tmp_path / "pending_errors.jsonl"),
+                "manifest": str(tmp_path / "pending_manifest.json"),
+            },
+        }
+    )
+    log = tmp_path / "supervisor.jsonl"
+    _write_jsonl(
+        log,
+        [
+            {"timestamp_utc": "2026-06-15T00:00:00+00:00", "maintain": {"target_running": 2}, "status": {"generation_rows": 1}},
+            {"timestamp_utc": "2026-06-15T00:05:00+00:00", "maintain": {"target_running": 2}, "status": {"generation_rows": 3}},
+        ],
+    )
+
+    report = shard_planner.progress_report(plan, supervisor_log=log)
+
+    assert report["by_status"]["running"] == 1
+    assert report["by_status"]["pending"] == 1
+    assert report["health"]["status"] == "warn"
+    assert "running_below_target" in report["health"]["issues"]
+    assert report["health"]["target_running"] == 2
