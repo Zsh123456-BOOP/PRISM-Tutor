@@ -14,6 +14,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from prism_tutor.eval.io import read_jsonl, write_json, write_jsonl
+from prism_tutor.eval.generation_records import deduplicate_generation_rows
 from prism_tutor.eval.judge_client import JudgeClientConfig, make_judge_client
 from prism_tutor.utils.config import load_yaml
 
@@ -165,6 +166,7 @@ def main(argv: list[str] | None = None) -> int:
     rows = []
     for file in _input_files(args.input):
         rows.extend(read_jsonl(file))
+    rows, deduplication_report = deduplicate_generation_rows(rows)
     if args.limit is not None:
         rows = rows[: args.limit]
 
@@ -196,6 +198,7 @@ def main(argv: list[str] | None = None) -> int:
     write_jsonl(raw_output, judged)
     metadata = _run_metadata(judged, dry_run=dry_run, requested_model=cfg.get("requested_model"))
     metadata["input_rows"] = len(rows)
+    metadata["generation_deduplication"] = deduplication_report
     write_json(out_dir / "judge_metadata.json", metadata)
 
     print(json.dumps({"input_rows": len(rows), "output": str(output), "raw_output": str(raw_output)}, indent=2))

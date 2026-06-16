@@ -7,6 +7,7 @@ from statistics import mean
 from typing import Any
 
 from .correctness import evaluate_internal_correctness
+from .generation_records import deduplicate_generation_rows
 from .judge_merge import merge_leakage
 from .leakage_detector import detect_leakage
 from .misconception_metrics import evaluate_misconceptions
@@ -134,6 +135,7 @@ def compute_auto_metrics(
     gold_rows: list[dict[str, Any]] | None = None,
     judge_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    generation_rows, deduplication_report = deduplicate_generation_rows(generation_rows)
     gold_index = {_key(row): row for row in gold_rows or []}
     judge_index = _build_judge_index(judge_rows)
     record_metrics: list[dict[str, Any]] = []
@@ -166,6 +168,7 @@ def compute_auto_metrics(
 
     coverage = {
         "generation_count": len(generation_rows),
+        **deduplication_report,
         "gold_count": len(gold_index),
         "judge_count": len(judge_rows or []),
         "judge_matched_count": sum(row.get("judge_leakage_coverage") == 1.0 for row in record_metrics),

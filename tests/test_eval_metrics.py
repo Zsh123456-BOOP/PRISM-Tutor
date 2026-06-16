@@ -140,6 +140,58 @@ def test_parse_failed_records_are_kept_but_structured_metrics_are_missing():
     assert aggregate["misconception_coverage"] == 0.0
 
 
+def test_generation_duplicates_prefer_latest_success_for_metrics():
+    generations = [
+        {
+            "sample_id": "s1",
+            "dataset": "mathdial",
+            "split": "test",
+            "method": "ours",
+            "status": "failed",
+            "parse_success": False,
+            "final_response": "",
+        },
+        {
+            "sample_id": "s1",
+            "dataset": "mathdial",
+            "split": "test",
+            "method": "ours",
+            "status": "success",
+            "parse_success": True,
+            "final_response": "The answer is 42.",
+            "parsed_output": {"answer": "42"},
+            "usage": {"prompt_tokens": 5, "completion_tokens": 7},
+        },
+        {
+            "sample_id": "s1",
+            "dataset": "mathdial",
+            "split": "test",
+            "method": "ours",
+            "status": "success",
+            "parse_success": True,
+            "final_response": "The answer is 42.",
+            "parsed_output": {"answer": "42"},
+            "usage": {"prompt_tokens": 5, "completion_tokens": 8},
+        },
+    ]
+    gold = [{"sample_id": "s1", "dataset": "mathdial", "answer": "42"}]
+
+    result = compute_auto_metrics(generations, gold)
+    row = result["record_metrics"][0]
+    coverage = result["coverage_report"]
+
+    assert len(result["record_metrics"]) == 1
+    assert row["parse_success"] is True
+    assert row["total_tokens"] == 13
+    assert coverage["raw_generation_count"] == 3
+    assert coverage["generation_count"] == 1
+    assert coverage["duplicate_generation_count"] == 2
+    assert coverage["duplicate_key_count"] == 1
+    assert coverage["replaced_failed_with_success_count"] == 1
+    assert coverage["repeated_success_duplicate_count"] == 1
+    assert coverage["parse_failure_count"] == 0
+
+
 def test_judge_leakage_merges_with_rule_leakage_for_final_label():
     generations = [
         {

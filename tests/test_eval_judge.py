@@ -298,6 +298,43 @@ def test_run_judge_writes_display_order_fields(tmp_path):
     assert metadata["actual_models"] == ["mock-judge"]
 
 
+def test_run_judge_deduplicates_generation_recovery_rows(tmp_path):
+    input_path = tmp_path / "generations.jsonl"
+    output_dir = tmp_path / "judge"
+    rows = [
+        {
+            "sample_id": "s1",
+            "dataset": "mathdial",
+            "split": "test",
+            "method": "ours_full",
+            "status": "failed",
+            "final_response": "",
+            "state": {"sample": {"question": "1+1", "metadata": {"correct_answer": "2"}}},
+        },
+        {
+            "sample_id": "s1",
+            "dataset": "mathdial",
+            "split": "test",
+            "method": "ours_full",
+            "status": "success",
+            "final_response": "Try adding one and one.",
+            "state": {"sample": {"question": "1+1", "metadata": {"correct_answer": "2"}}},
+        },
+    ]
+    input_path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+
+    rc = run_judge.main(["--input", str(input_path), "--output_dir", str(output_dir)])
+
+    judged = [json.loads(line) for line in (output_dir / "judge_scores.jsonl").read_text(encoding="utf-8").splitlines()]
+    metadata = json.loads((output_dir / "judge_metadata.json").read_text(encoding="utf-8"))
+    assert rc == 0
+    assert len(judged) == 1
+    assert metadata["input_rows"] == 1
+    assert metadata["generation_deduplication"]["raw_generation_count"] == 2
+    assert metadata["generation_deduplication"]["duplicate_generation_count"] == 1
+    assert metadata["generation_deduplication"]["replaced_failed_with_success_count"] == 1
+
+
 def test_run_judge_metadata_summarizes_multiple_actual_models():
     judged = [
         {

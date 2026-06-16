@@ -11,6 +11,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from prism_tutor.eval.aggregate import compute_auto_metrics
+from prism_tutor.eval.generation_records import deduplicate_generation_rows
 from prism_tutor.eval.io import read_jsonl, write_csv, write_json, write_jsonl
 from prism_tutor.eval.leakage_detector import detect_leakage
 
@@ -72,6 +73,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     generation_rows = _read_many(_files(args.generations))
+    deduped_generation_rows, _ = deduplicate_generation_rows(generation_rows)
     gold_rows = _read_many(_files(args.gold))
     judge_rows = _read_many(_files(args.judge_scores))
     result = compute_auto_metrics(generation_rows, gold_rows, judge_rows)
@@ -123,7 +125,7 @@ def main(argv: list[str] | None = None) -> int:
     write_csv(out / "routing_metrics.csv", _subset_rows(result["record_metrics"], routing_fields), routing_fields)
     write_csv(out / "state_metrics.csv", _subset_rows(result["record_metrics"], state_fields), state_fields)
     write_csv(out / "leakage_metrics.csv", _subset_rows(result["record_metrics"], leakage_fields), leakage_fields)
-    write_jsonl(out / "leakage_rule_hits.jsonl", _leakage_hits(generation_rows, gold_rows))
+    write_jsonl(out / "leakage_rule_hits.jsonl", _leakage_hits(deduped_generation_rows, gold_rows))
     write_json(out / "metric_coverage_report.json", result["coverage_report"])
     write_json(
         out / "metric_alignment_report.json",

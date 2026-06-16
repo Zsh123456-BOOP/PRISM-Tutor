@@ -130,3 +130,45 @@ def test_compute_metrics_cli_merges_judge_leakage_outputs(tmp_path: Path) -> Non
     assert coverage["judge_matched_count"] == 1
     assert coverage["orphan_judge_count"] == 0
     assert alignment["orphan_judges"] == []
+
+
+def test_compute_metrics_cli_deduplicates_generation_recovery_rows(tmp_path: Path) -> None:
+    generations = tmp_path / "generations.jsonl"
+    gold = tmp_path / "gold.jsonl"
+    output = tmp_path / "metrics"
+    _write_jsonl(
+        generations,
+        [
+            {
+                "sample_id": "s1",
+                "dataset": "mathdial",
+                "split": "test",
+                "method": "ours_full",
+                "status": "failed",
+                "final_response": "The answer is 42.",
+                "parse_success": False,
+            },
+            {
+                "sample_id": "s1",
+                "dataset": "mathdial",
+                "split": "test",
+                "method": "ours_full",
+                "status": "success",
+                "final_response": "Try one more step.",
+                "parse_success": True,
+            },
+        ],
+    )
+    _write_jsonl(gold, [{"sample_id": "s1", "dataset": "mathdial", "answer": "42"}])
+
+    rc = compute_metrics.main(["--generations", str(generations), "--gold", str(gold), "--output_dir", str(output)])
+
+    assert rc == 0
+    records = [json.loads(line) for line in (output / "record_auto_metrics.jsonl").read_text(encoding="utf-8").splitlines()]
+    leakage_hits = (output / "leakage_rule_hits.jsonl").read_text(encoding="utf-8").splitlines()
+    coverage = json.loads((output / "metric_coverage_report.json").read_text(encoding="utf-8"))
+    assert len(records) == 1
+    assert records[0]["parse_success"] is True
+    assert leakage_hits == []
+    assert coverage["raw_generation_count"] == 2
+    assert coverage["duplicate_generation_count"] == 1
