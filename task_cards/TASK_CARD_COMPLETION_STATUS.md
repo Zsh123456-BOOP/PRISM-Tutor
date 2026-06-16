@@ -66,7 +66,7 @@
 - [x] Table export coverage：`scripts/05_make_tables.py` 可自动生成 `table1_main_results` 至 `table6_robustness` 的 CSV/TeX，并写出 paired significance JSON。
 - [x] Exp5/Exp6 runtime variant coverage：Exp5 ablation 会真实禁用 risk estimator、QoS routing、budget controller、state commit 或对应风险项；Exp6 dry-run smoke 验证 `fixed_4/debate/generic_sparse/ours_full × noise{0.2,0.4} × budget{1000,2000,4000}` 展开为 24 个 method variants。
 - [x] Shard progress report：`python scripts/11_plan_or_run_shards.py progress --plan outputs/full_run/shard_plan.json --supervisor-log outputs/full_run/logs/shards/supervisor_compact.jsonl --rate-window 5` 已在服务器验证，health summary 当前为 `ok`，记录 `target_running`，并会提示 running 高于或低于目标并发。
-- [x] 正式 full_run 后台运行：已完成 232 个 shard，18 个 shard 正在 running；最新 generation_rows `21652`、error_rows `0`，estimated_records `294053`，completion_fraction `0.0736329845299997`；recent_rows_per_minute `73.46610008477151`，ETA 约 `61.797436660282834` 小时；health summary 为 `ok`。
+- [x] 正式 full_run 后台运行：已完成 238 个 shard，18 个 shard 正在 running；最新 generation_rows `21794`、error_rows `0`，estimated_records `294053`，completion_fraction `0.07411589067276987`；recent_rows_per_minute `74.05898261692376`，ETA 约 `61.27075797775095` 小时；health summary 为 `ok`。
 
 ## 仍需服务器真实执行的项目
 
@@ -78,7 +78,7 @@
 - [x] 用 live smoke raw logs 重新生成 smoke 版 tables、figures、paper artifacts。
 - [x] 提供全量正式实验前的分片执行能力与规模估算 gate。
 - [x] 提供全量正式实验的 shard manifest、status、launch 和 maintain 工具：`scripts/11_plan_or_run_shards.py`。
-- [ ] 使用真实 Qwen3-8B endpoint 跑完全量 Exp0-Exp6 generation。目前已完成 232 个 shard，并由 supervisor/maintainer 维持运行；尚未完成全量 1792 个 job。
+- [ ] 使用真实 Qwen3-8B endpoint 跑完全量 Exp0-Exp6 generation。目前已完成 238 个 shard，并由 supervisor/maintainer 维持运行；尚未完成全量 1792 个 job。
 - [ ] 全量实验完成后执行正式 200 条 blind human audit，并填入人工标签后计算 agreement。
 - [ ] 用全量真实 raw logs 重新生成正式论文 tables、figures、paper artifacts。
 
