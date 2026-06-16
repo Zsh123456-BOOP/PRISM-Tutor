@@ -57,6 +57,84 @@ def test_build_plan_estimates_records_by_shard(tmp_path: Path) -> None:
     assert [job["estimated_records"] for job in plan["jobs"]] == [10, 6]
     assert "--live-llm" not in plan["jobs"][0]["argv"]
     assert "--resume" in plan["jobs"][0]["argv"]
+    assert plan["git_freeze"] == {"enabled": False}
+
+
+def test_build_plan_can_freeze_current_git_commit(tmp_path: Path, monkeypatch) -> None:
+    experiments = tmp_path / "experiments.yaml"
+    experiments.write_text(
+        json.dumps({"experiments": {"exp0": {"datasets": ["mathdial"], "split": "test", "methods": ["single_tutor"]}}}),
+        encoding="utf-8",
+    )
+    _write_jsonl(tmp_path / "splits" / "mathdial_test.jsonl", [{"sample_id": "m0"}])
+    monkeypatch.setattr(
+        shard_planner,
+        "git_metadata",
+        lambda: {"commit": "abc123", "branch": "main", "dirty": False, "status_short": []},
+    )
+
+    plan = shard_planner.build_plan(
+        experiments_config=str(experiments),
+        split_dir=str(tmp_path / "splits"),
+        output_dir=str(tmp_path / "out"),
+        num_shards=1,
+        freeze_git=True,
+    )
+
+    assert plan["git_freeze"]["enabled"] is True
+    assert plan["git_freeze"]["commit"] == "abc123"
+    assert plan["git_freeze"]["dirty_at_plan"] is False
+
+
+def test_build_plan_refuses_dirty_git_freeze_without_override(tmp_path: Path, monkeypatch) -> None:
+    experiments = tmp_path / "experiments.yaml"
+    experiments.write_text(
+        json.dumps({"experiments": {"exp0": {"datasets": ["mathdial"], "split": "test", "methods": ["single_tutor"]}}}),
+        encoding="utf-8",
+    )
+    _write_jsonl(tmp_path / "splits" / "mathdial_test.jsonl", [{"sample_id": "m0"}])
+    monkeypatch.setattr(
+        shard_planner,
+        "git_metadata",
+        lambda: {"commit": "abc123", "branch": "main", "dirty": True, "status_short": [" M file.py"]},
+    )
+
+    try:
+        shard_planner.build_plan(
+            experiments_config=str(experiments),
+            split_dir=str(tmp_path / "splits"),
+            output_dir=str(tmp_path / "out"),
+            num_shards=1,
+            freeze_git=True,
+        )
+    except RuntimeError as exc:
+        assert "dirty worktree" in str(exc)
+    else:
+        raise AssertionError("Expected dirty git-freeze plan creation to fail")
+
+
+def test_plan_git_freeze_check_refuses_commit_mismatch_and_dirty_worktree(monkeypatch) -> None:
+    plan = {
+        "git_freeze": {
+            "enabled": True,
+            "commit": "abc123",
+            "allow_dirty_git": False,
+        }
+    }
+    monkeypatch.setattr(
+        shard_planner,
+        "git_metadata",
+        lambda: {"commit": "def456", "branch": "main", "dirty": True, "status_short": [" M file.py"]},
+    )
+
+    try:
+        shard_planner._require_plan_git_match(plan)
+    except RuntimeError as exc:
+        message = str(exc)
+        assert "git_commit_mismatch" in message
+        assert "dirty_worktree" in message
+    else:
+        raise AssertionError("Expected git freeze check to fail")
 
 
 def test_build_plan_expands_exp6_robustness_factor(tmp_path: Path) -> None:

@@ -19,6 +19,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from prism_tutor.utils.config import load_yaml
+from prism_tutor.utils.reproducibility import git_metadata
 
 
 def _split_counts(split_dir: Path) -> dict[tuple[str, str], int]:
@@ -54,6 +55,48 @@ def _expanded_method_count(experiment: str, spec: dict[str, Any]) -> int:
     return method_count * len(probabilities) * len(token_budgets)
 
 
+def _plan_git_freeze(*, enabled: bool, allow_dirty: bool) -> dict[str, Any]:
+    if not enabled:
+        return {"enabled": False}
+    git = git_metadata()
+    if not git.get("commit"):
+        raise RuntimeError("Cannot create git-frozen shard plan without a git commit")
+    if git.get("dirty") and not allow_dirty:
+        raise RuntimeError(
+            "Refusing to create git-frozen shard plan from a dirty worktree; "
+            "commit/stash changes or pass --allow-dirty-git for smoke-only plans"
+        )
+    return {
+        "enabled": True,
+        "commit": git.get("commit"),
+        "branch": git.get("branch"),
+        "dirty_at_plan": bool(git.get("dirty")),
+        "status_short_at_plan": git.get("status_short") or [],
+        "allow_dirty_git": allow_dirty,
+    }
+
+
+def _require_plan_git_match(plan: dict[str, Any]) -> None:
+    freeze = plan.get("git_freeze") or {}
+    if not freeze.get("enabled"):
+        return
+    current = git_metadata()
+    expected_commit = freeze.get("commit")
+    current_commit = current.get("commit")
+    failures = []
+    if not current_commit:
+        failures.append({"reason": "missing_current_git_commit"})
+    elif current_commit != expected_commit:
+        failures.append({"reason": "git_commit_mismatch", "expected": expected_commit, "actual": current_commit})
+    if current.get("dirty") and not freeze.get("allow_dirty_git"):
+        failures.append({"reason": "dirty_worktree", "status_short": current.get("status_short") or []})
+    if failures:
+        raise RuntimeError(
+            "Shard plan git freeze check failed: "
+            + json.dumps(failures, ensure_ascii=False, sort_keys=True)
+        )
+
+
 def build_plan(
     *,
     experiments_config: str,
@@ -64,6 +107,8 @@ def build_plan(
     live_llm: bool = True,
     resume: bool = True,
     limit: int | None = None,
+    freeze_git: bool = False,
+    allow_dirty_git: bool = False,
 ) -> dict[str, Any]:
     if num_shards < 1:
         raise ValueError("num_shards must be >= 1")
@@ -132,6 +177,7 @@ def build_plan(
         "live_llm": live_llm,
         "resume": resume,
         "limit": limit,
+        "git_freeze": _plan_git_freeze(enabled=freeze_git, allow_dirty=allow_dirty_git),
         "split_counts": {f"{dataset}/{split}": count for (dataset, split), count in sorted(counts.items())},
         "job_count": len(jobs),
         "estimated_records": sum(job["estimated_records"] for job in jobs),
@@ -294,6 +340,7 @@ def _select_job(plan: dict[str, Any], job_id: str | None, launch_next: bool, sel
 
 
 def launch_job(plan: dict[str, Any], *, job_id: str | None, launch_next: bool, background: bool, selected_ids: set[str] | None = None) -> dict[str, Any]:
+    _require_plan_git_match(plan)
     job = _select_job(plan, job_id, launch_next, selected_ids=selected_ids)
     argv = list(job["argv"])
     stdout_path = Path(job["paths"]["stdout"])
@@ -562,6 +609,8 @@ def main(argv: list[str] | None = None) -> int:
     plan_parser.add_argument("--dry-run", action="store_true", help="Plan commands without --live-llm.")
     plan_parser.add_argument("--no-resume", action="store_true")
     plan_parser.add_argument("--limit", type=int)
+    plan_parser.add_argument("--no-git-freeze", action="store_true", help="Do not bind the shard plan to the current git commit. Use only for smoke plans.")
+    plan_parser.add_argument("--allow-dirty-git", action="store_true", help="Allow creating or launching a git-frozen plan from a dirty worktree. Use only for smoke plans.")
 
     status_parser = sub.add_parser("status")
     status_parser.add_argument("--plan", default="outputs/full_run/shard_plan.json")
@@ -592,16 +641,21 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     if args.command == "plan":
-        plan = build_plan(
-            experiments_config=args.experiments_config,
-            split_dir=args.split_dir,
-            output_dir=args.output_dir,
-            num_shards=args.num_shards,
-            experiments=_split_csv(args.experiments),
-            live_llm=not args.dry_run,
-            resume=not args.no_resume,
-            limit=args.limit,
-        )
+        try:
+            plan = build_plan(
+                experiments_config=args.experiments_config,
+                split_dir=args.split_dir,
+                output_dir=args.output_dir,
+                num_shards=args.num_shards,
+                experiments=_split_csv(args.experiments),
+                live_llm=not args.dry_run,
+                resume=not args.no_resume,
+                limit=args.limit,
+                freeze_git=not args.no_git_freeze,
+                allow_dirty_git=args.allow_dirty_git,
+            )
+        except RuntimeError as exc:
+            parser.error(str(exc))
         write_plan(plan, args.plan_output)
         print(json.dumps({"plan": args.plan_output, "job_count": plan["job_count"], "estimated_records": plan["estimated_records"]}, indent=2))
         return 0
