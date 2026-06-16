@@ -43,6 +43,36 @@ def _difficulty_from_sample(sample: dict[str, Any]) -> float:
     return max(0.2, min(0.8, len(problem_text) / 800))
 
 
+def _has_value(value: Any) -> bool:
+    if value is None or value == "":
+        return False
+    if isinstance(value, (list, tuple, set, dict)):
+        return bool(value)
+    return True
+
+
+def _metadata(sample: dict[str, Any]) -> dict[str, Any]:
+    metadata = sample.get("metadata")
+    return metadata if isinstance(metadata, dict) else {}
+
+
+def _has_any(record: dict[str, Any], keys: tuple[str, ...]) -> bool:
+    return any(_has_value(record.get(key)) for key in keys)
+
+
+def _sample_signals(sample: dict[str, Any]) -> dict[str, bool]:
+    metadata = _metadata(sample)
+    return {
+        "needs_solver": _has_any(sample, ("gold_answer", "answer", "ground_truth", "correct_answer"))
+        or _has_any(metadata, ("ground_truth", "correct_answer")),
+        "needs_misconception": _has_any(sample, ("student_error", "misconception_label", "misconception_labels"))
+        or _has_any(metadata, ("gold_misconception", "misconception_label", "misconception_labels")),
+        "needs_pedagogy": _has_any(sample, ("remediation_strategy", "teacher_intention", "scaffolding", "tutor_response"))
+        or _has_any(metadata, ("teacher_response", "teacher_intention", "remediation_strategy")),
+        "known_leakage": bool(sample.get("leakage") is True or str(sample.get("leakage", "")).lower() in {"true", "1", "yes"}),
+    }
+
+
 def estimate_risk(state: TutorGraphState, config: RiskConfig | None = None) -> RiskEstimatorOutput:
     cfg = config or RiskConfig()
     solver = _latest(state, "solver")
@@ -50,14 +80,27 @@ def estimate_risk(state: TutorGraphState, config: RiskConfig | None = None) -> R
     hint = _latest(state, "hint")
     verifier = _latest(state, "verifier")
 
-    answer_uncertainty = float(solver.get("uncertainty", 1 - float(solver.get("confidence", 0.5))))
+    signals = _sample_signals(state.sample)
+
+    answer_uncertainty = float(solver.get("uncertainty", 1 - float(solver.get("confidence", 0.55))))
+    if signals["needs_solver"]:
+        answer_uncertainty = max(answer_uncertainty, 0.72)
+    else:
+        answer_uncertainty = min(answer_uncertainty, 0.45)
+
     severity = {"low": 0.2, "medium": 0.55, "high": 0.9}.get(str(misconception.get("severity", "medium")), 0.5)
     misconception_risk = severity * float(misconception.get("confidence", 0.5))
     if misconception.get("misconception_detected") is True:
         misconception_risk = max(misconception_risk, 0.6)
+    if signals["needs_misconception"]:
+        misconception_risk = max(misconception_risk, 0.72)
 
     pedagogy_risk = 0.35
+    if signals["needs_pedagogy"]:
+        pedagogy_risk = max(pedagogy_risk, 0.68)
     leakage_risk = float(hint.get("answer_leakage_risk", 0.2))
+    if signals["known_leakage"]:
+        leakage_risk = max(leakage_risk, 0.65)
     state_conflict_risk = 0.2
     for issue in verifier.get("issues", []):
         issue_type = issue.get("issue_type")

@@ -10,6 +10,7 @@ def test_router_selects_low_medium_high_agents():
     low_state = TutorGraphState(sample={"sample_id": "l", "difficulty": "easy"}, method="M1")
     low = estimate_risk(low_state, RiskConfig(low_threshold=0.5, high_threshold=0.8))
     assert "final_tutor" in router.select_agents(low)
+    assert "hint" not in router.select_agents(low)
 
     high_state = TutorGraphState(sample={"sample_id": "h", "difficulty": "hard"}, method="M1")
     high_state.agent_outputs["verifier"] = [
@@ -23,8 +24,52 @@ def test_router_selects_low_medium_high_agents():
     ]
     high = estimate_risk(high_state)
     selected = router.select_agents(high)
-    assert "hint" in selected
+    assert "pedagogy" in selected
     assert "state_manager" in selected
+
+
+def test_risk_estimator_uses_dataset_schema_signals_for_routing():
+    state = TutorGraphState(
+        sample={
+            "sample_id": "bridge-1",
+            "problem_text": "Solve 8 / 2.",
+            "student_utterance": "I think it is 6.",
+            "student_error": "operation_confusion",
+            "remediation_strategy": "contrast",
+            "teacher_intention": "clarify_misunderstanding",
+        },
+        method="M1",
+    )
+
+    risk = estimate_risk(state)
+    selected = QoSRouter().select_agents(risk)
+
+    assert risk.misconception_risk >= 0.6
+    assert risk.pedagogy_risk >= 0.6
+    assert risk.answer_uncertainty < 0.7
+    assert {"misconception", "pedagogy", "verifier", "final_tutor"}.issubset(set(selected))
+    assert "solver" not in selected
+    assert "hint" not in selected
+
+
+def test_prism_graph_routes_dynamically_from_sample_schema():
+    graph = build_prism_graph("M1")
+    result = graph.invoke(
+        {
+            "sample": {
+                "sample_id": "mathdial-1",
+                "problem_text": "What is 12 + 3?",
+                "student_utterance": "I got 9.",
+                "scaffolding": ["probing"],
+                "metadata": {"ground_truth": "15"},
+            },
+            "method": "M1",
+        }
+    )
+
+    assert result.risk_scores
+    assert {"solver", "pedagogy", "verifier", "final_tutor"}.issubset(set(result.selected_agents))
+    assert "hint" not in result.selected_agents
 
 
 def test_state_commit_tentative_on_conflict():
@@ -84,7 +129,17 @@ def test_prism_graph_can_bypass_qos_router_for_ablation():
 
 def test_prism_graph_injects_noisy_agent_outputs_deterministically():
     graph = build_prism_graph("M1", config=PrismGraphConfig(noisy_agent_probability=1.0, noisy_agent_seed=7))
-    result = graph.invoke({"sample": {"sample_id": "s1", "question": "What is 1+1?"}, "method": "M1"})
+    result = graph.invoke(
+        {
+            "sample": {
+                "sample_id": "s1",
+                "question": "What is 1+1?",
+                "scaffolding": ["probing"],
+                "metadata": {"ground_truth": "2"},
+            },
+            "method": "M1",
+        }
+    )
 
     noisy_calls = [call for call in result.llm_calls if "noisy_agent_injected" in call.get("warnings", [])]
     assert noisy_calls

@@ -10,16 +10,11 @@ from prism_tutor.agents.schemas import RiskEstimatorOutput
 class RouterConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    low_agents: list[str] = Field(default_factory=lambda: ["solver", "hint", "verifier", "final_tutor"])
-    medium_agents: list[str] = Field(
-        default_factory=lambda: ["solver", "misconception", "pedagogy", "hint", "verifier", "final_tutor"]
-    )
+    low_agents: list[str] = Field(default_factory=lambda: ["final_tutor"])
+    medium_agents: list[str] = Field(default_factory=lambda: ["pedagogy", "verifier", "final_tutor"])
     high_agents: list[str] = Field(
         default_factory=lambda: [
-            "solver",
-            "misconception",
             "pedagogy",
-            "hint",
             "verifier",
             "state_manager",
             "final_tutor",
@@ -40,9 +35,11 @@ class QoSRouter:
             selected = list(self.config.low_agents)
 
         if risk.leakage_risk >= 0.6:
-            selected = self._ensure(selected, ["hint", "pedagogy", "verifier"])
+            selected = self._ensure(selected, ["pedagogy", "verifier"])
         if risk.misconception_risk >= 0.6:
-            selected = self._ensure(selected, ["misconception", "pedagogy"])
+            selected = self._ensure(selected, ["misconception", "verifier"])
+        if risk.pedagogy_risk >= 0.6:
+            selected = self._ensure(selected, ["pedagogy", "verifier"])
         if risk.state_conflict_risk >= 0.6:
             selected = self._ensure(selected, ["state_manager", "verifier"])
         if risk.answer_uncertainty >= 0.7:
