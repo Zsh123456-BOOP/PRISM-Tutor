@@ -22,6 +22,8 @@ shard_planner = importlib.util.module_from_spec(SPEC)
 assert SPEC and SPEC.loader
 SPEC.loader.exec_module(shard_planner)
 
+from prism_tutor.utils.reproducibility import collect_reproducibility_metadata
+
 
 def _status_summary(plan_path: str | Path) -> dict[str, Any]:
     if not Path(plan_path).exists():
@@ -253,6 +255,18 @@ def _skipped_step(step: dict[str, Any], reason: str) -> dict[str, Any]:
     }
 
 
+def _invocation_metadata(args: argparse.Namespace, argv: list[str] | None) -> dict[str, Any]:
+    return {
+        "argv": list(argv) if argv is not None else sys.argv[1:],
+        "cwd": str(Path.cwd()),
+        "repo_root": str(ROOT),
+        "plan": args.plan,
+        "output_dir": args.output_dir,
+        "manifest": args.manifest,
+        "dry_run": args.dry_run,
+    }
+
+
 def _run_steps(commands: list[dict[str, Any]], dry_run: bool, log_dir: str | Path | None = None) -> list[dict[str, Any]]:
     steps: list[dict[str, Any]] = []
     failed_step: str | None = None
@@ -302,6 +316,8 @@ def main(argv: list[str] | None = None) -> int:
         "allow_mock_judge": args.allow_mock_judge,
         "run_human_agreement": args.run_human_agreement,
         "allow_unlabeled_agreement": args.allow_unlabeled_agreement,
+        "invocation": _invocation_metadata(args, argv),
+        "reproducibility": collect_reproducibility_metadata(),
         "shard_status": summary,
         **completion,
         "planned_steps": planned_steps,

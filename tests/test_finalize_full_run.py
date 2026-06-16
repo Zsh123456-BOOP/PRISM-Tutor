@@ -165,6 +165,21 @@ def test_finalize_dry_run_writes_planned_manifest(tmp_path: Path) -> None:
         "paper_artifacts",
     ]
     assert payload["step_log_dir"] == str(tmp_path / "out" / "logs" / "finalization")
+    assert payload["invocation"]["argv"] == [
+        "--plan",
+        str(plan),
+        "--output-dir",
+        str(tmp_path / "out"),
+        "--manifest",
+        str(manifest),
+        "--allow-incomplete",
+        "--dry-run",
+    ]
+    assert payload["invocation"]["cwd"]
+    assert payload["invocation"]["repo_root"] == str(ROOT)
+    assert payload["reproducibility"]["python_executable"]
+    assert "git" in payload["reproducibility"]
+    assert "package_versions" in payload["reproducibility"]
 
 
 def test_finalize_run_command_preserves_stdout_stderr_logs(tmp_path: Path) -> None:
