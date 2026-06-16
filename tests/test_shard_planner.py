@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import subprocess
 from pathlib import Path
 
 
@@ -159,6 +160,62 @@ def test_status_report_marks_running_pid(tmp_path: Path) -> None:
 
     assert report["by_status"] == {"running": 1}
     assert report["jobs"][0]["pid_running"] is True
+
+
+def test_pid_is_running_treats_zombie_process_as_not_running(monkeypatch) -> None:
+    monkeypatch.setattr(shard_planner.os, "kill", lambda pid, signal: None)
+
+    def fake_run(args, check, capture_output, text):
+        assert args[:3] == ["ps", "-o", "stat="]
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="Z+\n", stderr="")
+
+    monkeypatch.setattr(shard_planner.subprocess, "run", fake_run)
+
+    assert shard_planner._pid_is_running(12345) is False
+
+
+def test_status_report_counts_only_unresolved_error_rows(tmp_path: Path) -> None:
+    generations = tmp_path / "generations.jsonl"
+    errors = tmp_path / "errors.jsonl"
+    _write_jsonl(
+        generations,
+        [
+            {"sample_id": "s1", "dataset": "bridge", "split": "test", "method": "oracle_routing", "status": "failed"},
+            {"sample_id": "s1", "dataset": "bridge", "split": "test", "method": "oracle_routing", "status": "success"},
+            {"sample_id": "s2", "dataset": "bridge", "split": "test", "method": "oracle_routing", "status": "success"},
+        ],
+    )
+    _write_jsonl(
+        errors,
+        [
+            {"sample_id": "s1", "dataset": "bridge", "split": "test", "method": "oracle_routing", "status": "failed"},
+            {"sample_id": "s3", "dataset": "bridge", "split": "test", "method": "oracle_routing", "status": "failed"},
+        ],
+    )
+    (tmp_path / "manifest.json").write_text(json.dumps({"status": "completed"}), encoding="utf-8")
+    plan = {
+        "jobs": [
+            {
+                "job_id": "job0",
+                "experiment": "exp1",
+                "shard_index": 0,
+                "num_shards": 1,
+                "estimated_records": 3,
+                "paths": {
+                    "generations": str(generations),
+                    "errors": str(errors),
+                    "manifest": str(tmp_path / "manifest.json"),
+                },
+            }
+        ]
+    }
+
+    report = shard_planner.status_report(plan)
+
+    assert report["raw_error_rows"] == 2
+    assert report["error_rows"] == 1
+    assert report["jobs"][0]["raw_error_rows"] == 2
+    assert report["jobs"][0]["error_rows"] == 1
 
 
 def test_launch_jobs_selects_distinct_next_jobs(monkeypatch) -> None:

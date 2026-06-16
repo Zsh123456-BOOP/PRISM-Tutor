@@ -157,6 +157,40 @@ def _count_jsonl(path: str | Path) -> int:
         return sum(1 for line in handle if line.strip())
 
 
+def _read_jsonl(path: str | Path) -> list[dict[str, Any]]:
+    p = Path(path)
+    if not p.exists():
+        return []
+    rows = []
+    with p.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            if not line.strip():
+                continue
+            rows.append(json.loads(line))
+    return rows
+
+
+def _record_key(record: dict[str, Any]) -> tuple[str, str, str, str]:
+    return (
+        str(record.get("sample_id")),
+        str(record.get("dataset")),
+        str(record.get("split")),
+        str(record.get("method")),
+    )
+
+
+def _unresolved_error_rows(generation_path: str | Path, error_path: str | Path) -> int:
+    errors = _read_jsonl(error_path)
+    if not errors:
+        return 0
+    successful_keys = {
+        _record_key(record)
+        for record in _read_jsonl(generation_path)
+        if record.get("status") == "success"
+    }
+    return sum(1 for record in errors if _record_key(record) not in successful_keys)
+
+
 def _read_pid(path: str | Path) -> int | None:
     p = Path(path)
     if not p.exists():
@@ -176,13 +210,21 @@ def _pid_is_running(pid: int | None) -> bool:
         return False
     except PermissionError:
         return True
+    try:
+        status = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], check=False, capture_output=True, text=True)
+    except Exception:
+        return True
+    stat = status.stdout.strip()
+    if status.returncode == 0 and stat.startswith("Z"):
+        return False
     return True
 
 
 def job_status(job: dict[str, Any]) -> dict[str, Any]:
     manifest_path = Path(job["paths"]["manifest"])
     generation_rows = _count_jsonl(job["paths"]["generations"])
-    error_rows = _count_jsonl(job["paths"]["errors"])
+    raw_error_rows = _count_jsonl(job["paths"]["errors"])
+    error_rows = _unresolved_error_rows(job["paths"]["generations"], job["paths"]["errors"]) if raw_error_rows else 0
     manifest: dict[str, Any] | None = None
     pid = _read_pid(job["paths"].get("pid", ""))
     pid_running = _pid_is_running(pid)
@@ -209,6 +251,7 @@ def job_status(job: dict[str, Any]) -> dict[str, Any]:
         "status": status,
         "generation_rows": generation_rows,
         "error_rows": error_rows,
+        "raw_error_rows": raw_error_rows,
         "estimated_records": job.get("estimated_records"),
         "pid": pid,
         "pid_running": pid_running,
@@ -226,6 +269,7 @@ def status_report(plan: dict[str, Any]) -> dict[str, Any]:
         "by_status": by_status,
         "generation_rows": sum(job["generation_rows"] for job in jobs),
         "error_rows": sum(job["error_rows"] for job in jobs),
+        "raw_error_rows": sum(job["raw_error_rows"] for job in jobs),
         "estimated_records": sum(int(job.get("estimated_records") or 0) for job in jobs),
         "jobs": jobs,
     }
@@ -315,11 +359,13 @@ def maintain_jobs(plan: dict[str, Any], *, target_running: int, max_launches: in
             "by_status": report_before["by_status"],
             "generation_rows": report_before["generation_rows"],
             "error_rows": report_before["error_rows"],
+            "raw_error_rows": report_before.get("raw_error_rows", report_before["error_rows"]),
         },
         "after": {
             "by_status": report_after["by_status"],
             "generation_rows": report_after["generation_rows"],
             "error_rows": report_after["error_rows"],
+            "raw_error_rows": report_after.get("raw_error_rows", report_after["error_rows"]),
         },
     }
 
@@ -341,6 +387,7 @@ def _compact_status(report: dict[str, Any]) -> dict[str, Any]:
         "by_status": report["by_status"],
         "generation_rows": report["generation_rows"],
         "error_rows": report["error_rows"],
+        "raw_error_rows": report.get("raw_error_rows", report["error_rows"]),
         "estimated_records": report["estimated_records"],
     }
 
