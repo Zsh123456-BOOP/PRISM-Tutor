@@ -139,15 +139,18 @@ def compute_auto_metrics(
     record_metrics: list[dict[str, Any]] = []
     orphan_generations: list[dict[str, Any]] = []
     seen_keys: set[tuple[str, str]] = set()
+    seen_method_keys: set[tuple[str, str, str]] = set()
 
     for record in generation_rows:
         key = _key(record)
         seen_keys.add(key)
+        seen_method_keys.add(_method_key(record))
         gold = gold_index.get(key)
         if gold is None and gold_index:
             orphan_generations.append({"dataset": key[0], "sample_id": key[1], "method": record.get("method")})
         record_metrics.append(compute_record_metrics(record, gold, _judge_for_record(record, judge_index)))
 
+    orphan_judges = _orphan_judge_rows(judge_rows or [], seen_keys, seen_method_keys)
     missing_samples = [
         {"dataset": dataset, "sample_id": sample_id}
         for dataset, sample_id in sorted(set(gold_index) - seen_keys)
@@ -167,6 +170,7 @@ def compute_auto_metrics(
         "judge_count": len(judge_rows or []),
         "judge_matched_count": sum(row.get("judge_leakage_coverage") == 1.0 for row in record_metrics),
         "judge_invalid_count": sum(row.get("judge_parse_success") is False for row in record_metrics),
+        "orphan_judge_count": len(orphan_judges),
         "parse_failure_count": sum(not bool(row.get("parse_success")) for row in record_metrics),
         "orphan_generation_count": len(orphan_generations),
         "missing_sample_count": len(missing_samples),
@@ -177,6 +181,7 @@ def compute_auto_metrics(
         "aggregate_metrics": aggregate_rows,
         "coverage_report": coverage,
         "orphan_generations": orphan_generations,
+        "orphan_judges": orphan_judges,
         "missing_samples": missing_samples,
     }
 
@@ -221,3 +226,19 @@ def _missing_gold_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
         "misconception": sum(row.get("misconception_coverage") == 0.0 for row in rows),
         "routing": sum(row.get("routing_coverage") == 0.0 for row in rows),
     }
+
+
+def _orphan_judge_rows(
+    judge_rows: list[dict[str, Any]],
+    generation_sample_keys: set[tuple[str, str]],
+    generation_method_keys: set[tuple[str, str, str]],
+) -> list[dict[str, Any]]:
+    orphans: list[dict[str, Any]] = []
+    for row in judge_rows:
+        method_key = _method_key(row)
+        sample_key = _key(row)
+        method = method_key[2]
+        matched = method_key in generation_method_keys if method else sample_key in generation_sample_keys
+        if not matched:
+            orphans.append({"dataset": sample_key[0], "sample_id": sample_key[1], "method": row.get("method")})
+    return orphans

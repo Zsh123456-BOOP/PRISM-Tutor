@@ -222,3 +222,32 @@ def test_failed_judge_row_does_not_count_as_leakage_coverage():
     assert result["coverage_report"]["judge_invalid_count"] == 1
     assert aggregate["judge_leakage_rate"] is None
     assert aggregate["final_leakage_rate"] == 0.0
+
+
+def test_orphan_judge_rows_are_reported_when_method_does_not_match_generation():
+    generations = [
+        {
+            "sample_id": "s1",
+            "dataset": "mathdial",
+            "split": "test",
+            "method": "ours",
+            "selected_agents": ["final_tutor"],
+            "rounds": 1,
+            "final_response": "Try one more intermediate step.",
+            "parse_success": True,
+        }
+    ]
+    gold = [{"sample_id": "s1", "dataset": "mathdial", "answer": "42"}]
+    judge = [
+        {
+            "sample_id": "s1",
+            "dataset": "mathdial",
+            "method": "missing_method",
+            "parsed_score": {"answer_leakage": True},
+        }
+    ]
+
+    result = compute_auto_metrics(generations, gold, judge)
+
+    assert result["coverage_report"]["orphan_judge_count"] == 1
+    assert result["orphan_judges"] == [{"dataset": "mathdial", "sample_id": "s1", "method": "missing_method"}]

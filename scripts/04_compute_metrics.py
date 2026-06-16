@@ -125,7 +125,14 @@ def main(argv: list[str] | None = None) -> int:
     write_csv(out / "leakage_metrics.csv", _subset_rows(result["record_metrics"], leakage_fields), leakage_fields)
     write_jsonl(out / "leakage_rule_hits.jsonl", _leakage_hits(generation_rows, gold_rows))
     write_json(out / "metric_coverage_report.json", result["coverage_report"])
-    write_json(out / "metric_alignment_report.json", {"orphan_generations": result["orphan_generations"], "missing_samples": result["missing_samples"]})
+    write_json(
+        out / "metric_alignment_report.json",
+        {
+            "orphan_generations": result["orphan_generations"],
+            "orphan_judges": result["orphan_judges"],
+            "missing_samples": result["missing_samples"],
+        },
+    )
     print(json.dumps({"generation_rows": len(generation_rows), "aggregate_rows": len(result["aggregate_metrics"]), "output_dir": str(out)}, indent=2))
     return 0
 

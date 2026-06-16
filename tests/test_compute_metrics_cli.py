@@ -119,6 +119,7 @@ def test_compute_metrics_cli_merges_judge_leakage_outputs(tmp_path: Path) -> Non
     record = json.loads((output / "record_auto_metrics.jsonl").read_text(encoding="utf-8").splitlines()[0])
     leakage_rows = list(csv.DictReader((output / "leakage_metrics.csv").open(encoding="utf-8")))
     coverage = json.loads((output / "metric_coverage_report.json").read_text(encoding="utf-8"))
+    alignment = json.loads((output / "metric_alignment_report.json").read_text(encoding="utf-8"))
 
     assert record["rule_leakage"] is False
     assert record["judge_leakage"] is True
@@ -127,3 +128,5 @@ def test_compute_metrics_cli_merges_judge_leakage_outputs(tmp_path: Path) -> Non
     assert leakage_rows[0]["final_leakage"] == "True"
     assert coverage["judge_count"] == 1
     assert coverage["judge_matched_count"] == 1
+    assert coverage["orphan_judge_count"] == 0
+    assert alignment["orphan_judges"] == []

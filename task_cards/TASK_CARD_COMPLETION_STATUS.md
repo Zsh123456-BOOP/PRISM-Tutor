@@ -16,7 +16,7 @@
 - [x] 08 Baseline 方法：method registry 覆盖 B0-B5 与实验变体；`prism_tutor/baselines/` 提供 Single Tutor、Fixed 2、Fixed 4、Debate、Generic Sparse、Difficulty Routing 与 Oracle Routing planner；runner live baseline 路径会记录 `baseline_plan`，Generic Sparse 与 Difficulty Routing 有禁止读取教育风险字段的 fairness tests。
 - [x] 09 PRISM 模块：risk estimator、QoS router、budget controller、state commit、M1/M2/M3 graph。
 - [x] 10 Runner 与日志：`scripts/02_run_generation.py` 生成 JSONL raw logs 与 schema-versioned manifest，支持 `--live-llm` 真实 vLLM endpoint 调用和 `--num-shards/--shard-index` 样本级分片。
-- [x] 11 自动指标：`scripts/04_compute_metrics.py` 生成 record/aggregate metrics、`routing_metrics.csv`、`state_metrics.csv`、`leakage_rule_hits.jsonl`、`leakage_metrics.csv` 和 coverage/alignment report，并已支持 unified schema gold 字段映射；`parse_success=false` 样本会保留在记录和 parse_success_rate 中，但 internal correctness / misconception 等结构化指标按 missing 处理；judge row 只有在 `parsed_score` 有效且无 `error` 时才计入 judge leakage coverage，失败 judge 不会被当作 non-leakage。
+- [x] 11 自动指标：`scripts/04_compute_metrics.py` 生成 record/aggregate metrics、`routing_metrics.csv`、`state_metrics.csv`、`leakage_rule_hits.jsonl`、`leakage_metrics.csv` 和 coverage/alignment report，并已支持 unified schema gold 字段映射；`parse_success=false` 样本会保留在记录和 parse_success_rate 中，但 internal correctness / misconception 等结构化指标按 missing 处理；judge row 只有在 `parsed_score` 有效且无 `error` 时才计入 judge leakage coverage，失败 judge 不会被当作 non-leakage；metric alignment report 会记录无法匹配 generation 的 orphan judge rows。
 - [x] 12 LLM judge：`scripts/03_run_judge.py` 默认 mock；真实 DeepSeek 需显式环境变量，已验证 `thinking_type=disabled` 后可稳定解析；judge runner 会为单候选/多候选保存 deterministic display order、seed、唯一 candidate_label，降低 position bias；judge score schema 会正确解析 `answer_leakage` 布尔值，避免字符串 `"false"` 被 truthiness 误判，并拒绝 bool 型数值分数；metrics/finalization 支持合并 rule leakage 与 judge leakage，输出 `judge_leakage`、`final_leakage` 和 `leakage_conflict`；run-level judge metadata 汇总 actual_models、parsed_count、error_count、output_rows 和 raw_response_count；formal finalization 的 judge step 默认传 `--require-real`，只有显式 `--allow-mock-judge` 才允许 smoke mock judge。
 - [x] 13 实验矩阵：`configs/experiments.yaml` 与 `scripts/run_exp*.sh`。
 - [x] 14 统计、表格和图：`scripts/05_make_tables.py`、`scripts/06_make_figures.py`；tables/significance 使用合并后的 `final_leakage`、`judge_leakage`、`leakage_conflict`，并能把 Exp6 的 `base__noise...__budget...` 方法变体纳入 robustness 表；table builder 会写出 `table_manifest.json`，正式模式拒绝空任务表或核心比较没有 paired samples，`--allow-incomplete-tables` 仅用于 smoke；figure builder 会在缺少 `internal_correctness`、`total_tokens`、`risk_bucket`、`agent_calls` 或 `state_conflict_rate` 等关键列时 fail-fast，并写出 `figure_manifest.json` 记录每张图的数据摘要。
@@ -26,7 +26,7 @@
 ## 已验证命令
 
 - [x] 本机 `python -m compileall prism_tutor scripts data serving tests`
-- [x] 本机 `python -m pytest -q`，结果：182 passed。
+- [x] 本机 `python -m pytest -q`，结果：183 passed。
 - [x] 服务器 `python -m pytest -q`，结果：182 passed。
 - [x] `python scripts/00_prepare_env_check.py --config configs/default.yaml --dry-run`
 - [x] 服务器 env check dry-run：`CUDA_VISIBLE_DEVICES=2,3 python scripts/00_prepare_env_check.py --config configs/default.yaml --output /tmp/prism_env_check_latest.json --dry-run`，结果 `status=ok`，检测到 4 张 GPU，CUDA_VISIBLE_DEVICES 与配置一致。
