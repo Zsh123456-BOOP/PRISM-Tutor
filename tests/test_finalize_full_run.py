@@ -146,6 +146,7 @@ def test_finalize_dry_run_writes_planned_manifest(tmp_path: Path) -> None:
     assert rc == 0
     assert payload["status"] == "planned"
     assert payload["shard_status"]["by_status"] == {"completed": 1, "pending": 1}
+    assert payload["shard_status"]["raw_error_rows"] == 0
     assert payload["completed_jobs"] == 1
     assert payload["total_jobs"] == 2
     assert payload["can_finalize"] is False

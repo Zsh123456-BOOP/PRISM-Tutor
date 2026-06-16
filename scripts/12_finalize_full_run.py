@@ -34,6 +34,7 @@ def _status_summary(plan_path: str | Path) -> dict[str, Any]:
         "by_status": report["by_status"],
         "generation_rows": report["generation_rows"],
         "error_rows": report["error_rows"],
+        "raw_error_rows": report.get("raw_error_rows", report["error_rows"]),
         "estimated_records": report["estimated_records"],
     }
 
