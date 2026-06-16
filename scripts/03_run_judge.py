@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from prism_tutor.eval.io import read_jsonl, write_json, write_jsonl
+from prism_tutor.eval.io import read_jsonl, write_json
 from prism_tutor.eval.generation_records import deduplicate_generation_rows
 from prism_tutor.eval.judge_client import JudgeClientConfig, make_judge_client
 from prism_tutor.utils.config import load_yaml
@@ -103,6 +103,21 @@ def _unique_candidate_label(base_label: str, used_labels: dict[str, int]) -> str
     return base_label if count == 1 else f"{base_label}_{count}"
 
 
+def _judge_key(row: dict) -> tuple[str, str, str, str]:
+    return (
+        str(row.get("dataset", "")),
+        str(row.get("sample_id", "")),
+        str(row.get("method", "")),
+        str(row.get("candidate_label") or row.get("method") or ""),
+    )
+
+
+def _append_jsonl(path: Path, row: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+
+
 def _run_metadata(judged: list[dict], *, dry_run: bool, requested_model: str | None) -> dict:
     if not judged:
         return {
@@ -138,6 +153,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output_dir", default="outputs/judge_scores")
     parser.add_argument("--limit", type=int)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--resume", action="store_true", help="Append missing judge rows and skip existing outputs.")
     parser.add_argument(
         "--require-real",
         action="store_true",
@@ -170,9 +186,26 @@ def main(argv: list[str] | None = None) -> int:
     if args.limit is not None:
         rows = rows[: args.limit]
 
-    judged = []
+    out_dir = Path(args.output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    output = out_dir / "judge_scores.jsonl"
+    raw_output = out_dir / "raw" / "judge_raw.jsonl"
+    existing_judged = read_jsonl(output) if args.resume and output.exists() else []
+    completed_keys = {_judge_key(row) for row in existing_judged}
+    if not args.resume:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text("", encoding="utf-8")
+        raw_output.parent.mkdir(parents=True, exist_ok=True)
+        raw_output.write_text("", encoding="utf-8")
+
+    judged = list(existing_judged)
+    skipped_existing = 0
     for row in rows:
         for candidate_row in _candidate_rows(row, seed=args.seed):
+            judge_key = _judge_key(candidate_row)
+            if judge_key in completed_keys:
+                skipped_existing += 1
+                continue
             sample = _sample_from_row(candidate_row)
             metadata = _metadata_from_sample(sample)
             case = {
@@ -188,17 +221,18 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 "gold_context": candidate_row.get("gold_context") or sample.get("misconception_label") or sample.get("student_error"),
             }
-            judged.append(client.judge(case))
-
-    out_dir = Path(args.output_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    output = out_dir / "judge_scores.jsonl"
-    raw_output = out_dir / "raw" / "judge_raw.jsonl"
-    write_jsonl(output, judged)
-    write_jsonl(raw_output, judged)
+            judged_row = client.judge(case)
+            judged.append(judged_row)
+            completed_keys.add(judge_key)
+            _append_jsonl(output, judged_row)
+            _append_jsonl(raw_output, judged_row)
     metadata = _run_metadata(judged, dry_run=dry_run, requested_model=cfg.get("requested_model"))
     metadata["input_rows"] = len(rows)
     metadata["generation_deduplication"] = deduplication_report
+    metadata["resume"] = bool(args.resume)
+    metadata["existing_output_rows"] = len(existing_judged)
+    metadata["skipped_existing_rows"] = skipped_existing
+    metadata["new_output_rows"] = len(judged) - len(existing_judged)
     write_json(out_dir / "judge_metadata.json", metadata)
 
     print(json.dumps({"input_rows": len(rows), "output": str(output), "raw_output": str(raw_output)}, indent=2))

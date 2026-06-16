@@ -335,6 +335,53 @@ def test_run_judge_deduplicates_generation_recovery_rows(tmp_path):
     assert metadata["generation_deduplication"]["replaced_failed_with_success_count"] == 1
 
 
+def test_run_judge_resume_skips_existing_rows(tmp_path):
+    input_path = tmp_path / "generations.jsonl"
+    output_dir = tmp_path / "judge"
+    rows = [
+        {
+            "sample_id": "s1",
+            "dataset": "mathdial",
+            "split": "test",
+            "method": "single_tutor",
+            "final_response": "Try adding one and one.",
+            "state": {"sample": {"question": "1+1", "metadata": {"correct_answer": "2"}}},
+        },
+        {
+            "sample_id": "s2",
+            "dataset": "mathdial",
+            "split": "test",
+            "method": "single_tutor",
+            "final_response": "Try adding two and two.",
+            "state": {"sample": {"question": "2+2", "metadata": {"correct_answer": "4"}}},
+        },
+    ]
+    input_path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+    output_dir.mkdir()
+    existing = {
+        "sample_id": "s1",
+        "dataset": "mathdial",
+        "method": "single_tutor",
+        "candidate_label": "single_tutor",
+        "raw_response": "{}",
+        "parsed_score": {"overall": 3},
+        "error": None,
+        "metadata": {"actual_model": "mock-judge", "dry_run": True},
+    }
+    (output_dir / "judge_scores.jsonl").write_text(json.dumps(existing) + "\n", encoding="utf-8")
+
+    rc = run_judge.main(["--input", str(input_path), "--output_dir", str(output_dir), "--resume"])
+
+    judged = [json.loads(line) for line in (output_dir / "judge_scores.jsonl").read_text(encoding="utf-8").splitlines()]
+    metadata = json.loads((output_dir / "judge_metadata.json").read_text(encoding="utf-8"))
+    assert rc == 0
+    assert len(judged) == 2
+    assert [row["sample_id"] for row in judged] == ["s1", "s2"]
+    assert metadata["existing_output_rows"] == 1
+    assert metadata["skipped_existing_rows"] == 1
+    assert metadata["new_output_rows"] == 1
+
+
 def test_run_judge_metadata_summarizes_multiple_actual_models():
     judged = [
         {
