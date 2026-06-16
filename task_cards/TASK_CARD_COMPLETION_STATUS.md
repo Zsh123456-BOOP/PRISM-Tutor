@@ -59,7 +59,7 @@
 - [x] Shard supervisor：`python scripts/11_plan_or_run_shards.py supervise --plan outputs/full_run/shard_plan.json --target-running 18 --interval-seconds 120 --log-path outputs/full_run/logs/shards/supervisor_compact.jsonl`，服务器 PID `2472200`。
 - [x] Full-run finalization gate：`scripts/12_finalize_full_run.py --allow-incomplete --dry-run` 已在服务器真实 shard plan 上验证，默认不调用 judge，计划步骤为 auto metrics、tables、figures、human audit sample、paper artifacts；manifest/stdout 会输出 `completed_jobs`、`total_jobs`、`can_finalize`、`planned_steps`；formal 模式会拒绝缺失 judge source、`--allow-mock-judge` 与 `--allow-unlabeled-agreement` 这类 smoke-only flag。
 - [x] Full-run finalization latest dry-run：服务器真实 shard plan 当前 `266/1792` jobs completed，`can_finalize=false`，planned steps 仍为 auto metrics、tables、figures、human audit sample、paper artifacts，未调用 judge/API；`outputs/full_run/finalization_manifest.dry_run_latest.json` 已包含 invocation、git commit、Python executable、`error_rows=0` 和 `raw_error_rows=79`。
-- [x] Full-run provenance dry-run audit：服务器当前 completed 267 个 shard 的 generation manifests 覆盖 76 个不同 git commits，`dirty_manifest_count=0`、`missing_commit_count=0`、`missing_manifest_count=1525`。这说明当前长跑不能默认作为单一 commit 的论文正式结果；formal finalization 会拒绝 mixed commits，除非显式传入 `--allow-mixed-generation-commits`。
+- [x] Full-run provenance dry-run audit：服务器当前 completed 273 个 shard 的 generation manifests 覆盖 77 个不同 git commits，`dirty_manifest_count=0`、`missing_commit_count=0`、`missing_manifest_count=1519`。这说明当前长跑不能默认作为单一 commit 的论文正式结果；formal finalization 会拒绝 mixed commits，除非显式传入 `--allow-mixed-generation-commits`。
 - [x] Finalization step logs：`scripts/12_finalize_full_run.py` 非 dry-run 时会为每个后处理 step 保存 stdout/stderr，并在 manifest 记录日志路径。
 - [x] Paper artifact run-local path gate：`scripts/09_export_paper_artifacts.py --artifact-prefix outputs/full_run` 可让 reproducibility checklist 和 artifact index 检查 full-run 目录，而不是误查全局 `outputs/*`。
 - [x] Reproducibility checklist coverage：`scripts/09_export_paper_artifacts.py` 导出的 checklist 包含 seed、config、model、GPU、judge metadata、data/log paths、git 和 package versions。
@@ -68,7 +68,7 @@
 - [x] Exp5/Exp6 runtime variant coverage：Exp5 ablation 会真实禁用 risk estimator、QoS routing、budget controller、state commit 或对应风险项；Exp6 dry-run smoke 验证 `fixed_4/debate/generic_sparse/ours_full × noise{0.2,0.4} × budget{1000,2000,4000}` 展开为 24 个 method variants。
 - [x] Shard progress report：`python scripts/11_plan_or_run_shards.py progress --plan outputs/full_run/shard_plan.json --supervisor-log outputs/full_run/logs/shards/supervisor_compact.jsonl --rate-window 5` 已在服务器验证，health summary 当前为 `ok`，记录 `target_running`，并会提示 running 高于或低于目标并发；status report 会保留 `raw_error_rows`，但 formal gate 使用 unresolved `error_rows`。
 - [x] Partial full-run metrics dedupe check：服务器当前 partial logs 临时计算自动指标时，raw_generation_count `23693` 去重为 generation_count `23403`，duplicate_generation_count `290`，orphan_generation_count `0`；该检查未调用 judge/API。
-- [x] 正式 full_run 后台运行：已完成 267 个 shard，18 个 shard 正在 running；最新 generation_rows `24982`、error_rows `0`、raw_error_rows `79`，estimated_records `294053`，completion_fraction `0.08495747365270886`；recent_rows_per_minute `74.92688961522964`，ETA 约 `59.85189949423903` 小时；health summary 为 `ok`。
+- [x] 正式 full_run 后台运行：已完成 273 个 shard，18 个 shard 正在 running；最新 generation_rows `25365`、error_rows `0`、raw_error_rows `79`，estimated_records `294053`，completion_fraction `0.08625995993919464`；recent_rows_per_minute `74.34706922455617`，ETA 约 `60.232815900350865` 小时；health summary 为 `ok`。
 
 ## 仍需服务器真实执行的项目
 
@@ -80,7 +80,7 @@
 - [x] 用 live smoke raw logs 重新生成 smoke 版 tables、figures、paper artifacts。
 - [x] 提供全量正式实验前的分片执行能力与规模估算 gate。
 - [x] 提供全量正式实验的 shard manifest、status、launch 和 maintain 工具：`scripts/11_plan_or_run_shards.py`。
-- [ ] 使用真实 Qwen3-8B endpoint 跑完全量 Exp0-Exp6 generation。目前已完成 267 个 shard，并由 supervisor/maintainer 维持运行；尚未完成全量 1792 个 job。当前这批长跑已发现 mixed generation commit provenance，论文正式结果建议在稳定 commit 上重建全量 run 目录后重跑。
+- [ ] 使用真实 Qwen3-8B endpoint 跑完全量 Exp0-Exp6 generation。目前已完成 273 个 shard，并由 supervisor/maintainer 维持运行；尚未完成全量 1792 个 job。当前这批长跑已发现 mixed generation commit provenance，论文正式结果建议在稳定 commit 上重建全量 run 目录后重跑。
 - [ ] 全量实验完成后执行正式 200 条 blind human audit，并填入人工标签后计算 agreement。
 - [ ] 用全量真实 raw logs 重新生成正式论文 tables、figures、paper artifacts。
 
