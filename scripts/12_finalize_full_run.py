@@ -93,6 +93,17 @@ def _require_human_agreement_inputs(args: argparse.Namespace) -> None:
         )
 
 
+def _require_formal_judge_source(args: argparse.Namespace) -> None:
+    if getattr(args, "allow_incomplete", False) or getattr(args, "run_judge", False):
+        return
+    judge_scores = Path(args.output_dir) / "judge_scores" / "judge_scores.jsonl"
+    if not judge_scores.exists():
+        raise SystemExit(
+            "Formal finalization requires --run-judge or existing judge scores: "
+            + str(judge_scores)
+        )
+
+
 def _cmd(*parts: str) -> list[str]:
     return [sys.executable, *parts]
 
@@ -299,10 +310,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--step-log-dir", help="Directory for per-step stdout/stderr logs. Defaults to <output-dir>/logs/finalization.")
     args = parser.parse_args(argv)
 
-    _require_formal_flag_consistency(args)
-    _require_human_agreement_inputs(args)
     summary = _status_summary(args.plan)
     _require_complete(summary, args.allow_incomplete)
+    _require_formal_flag_consistency(args)
+    _require_human_agreement_inputs(args)
+    _require_formal_judge_source(args)
     completion = _completion_summary(summary)
     commands = build_commands(args)
     step_log_dir = args.step_log_dir or str(Path(args.output_dir) / "logs" / "finalization")

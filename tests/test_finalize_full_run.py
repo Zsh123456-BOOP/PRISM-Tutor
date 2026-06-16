@@ -109,6 +109,9 @@ def test_finalize_formal_human_agreement_requires_labeled_csv(tmp_path: Path) ->
         "sample_id,annotator_id,human_quality_score,human_leakage_label,human_preference\n",
         encoding="utf-8",
     )
+    judge_scores = output_dir / "judge_scores" / "judge_scores.jsonl"
+    judge_scores.parent.mkdir(parents=True)
+    judge_scores.write_text("{}\n", encoding="utf-8")
     rc = finalize.main(
         [
             "--plan",
@@ -118,6 +121,65 @@ def test_finalize_formal_human_agreement_requires_labeled_csv(tmp_path: Path) ->
             "--manifest",
             str(tmp_path / "manifest.json"),
             "--run-human-agreement",
+            "--dry-run",
+        ]
+    )
+
+    assert rc == 0
+
+
+def test_finalize_formal_requires_judge_source_before_downstream_steps(tmp_path: Path) -> None:
+    plan = _write_plan(tmp_path, ["completed"])
+    output_dir = tmp_path / "out"
+
+    try:
+        finalize.main(
+            [
+                "--plan",
+                str(plan),
+                "--output-dir",
+                str(output_dir),
+                "--manifest",
+                str(tmp_path / "manifest.json"),
+                "--dry-run",
+            ]
+        )
+    except SystemExit as exc:
+        assert "Formal finalization requires --run-judge or existing judge scores" in str(exc)
+    else:
+        raise AssertionError("Expected formal finalization without judge source to fail")
+
+    judge_scores = output_dir / "judge_scores" / "judge_scores.jsonl"
+    judge_scores.parent.mkdir(parents=True)
+    judge_scores.write_text("{}\n", encoding="utf-8")
+
+    rc = finalize.main(
+        [
+            "--plan",
+            str(plan),
+            "--output-dir",
+            str(output_dir),
+            "--manifest",
+            str(tmp_path / "manifest.json"),
+            "--dry-run",
+        ]
+    )
+
+    assert rc == 0
+
+
+def test_finalize_formal_run_judge_satisfies_judge_source_gate(tmp_path: Path) -> None:
+    plan = _write_plan(tmp_path, ["completed"])
+
+    rc = finalize.main(
+        [
+            "--plan",
+            str(plan),
+            "--output-dir",
+            str(tmp_path / "out"),
+            "--manifest",
+            str(tmp_path / "manifest.json"),
+            "--run-judge",
             "--dry-run",
         ]
     )
