@@ -26,6 +26,19 @@ def _input_files(path: str | Path) -> list[Path]:
     return [p]
 
 
+def _resume_files(paths: list[str] | None) -> list[Path]:
+    files: list[Path] = []
+    for item in paths or []:
+        path = Path(item)
+        if not path.exists():
+            continue
+        if path.is_dir():
+            files.extend(sorted(path.rglob("*.jsonl")))
+        else:
+            files.append(path)
+    return files
+
+
 def _sample_from_row(row: dict) -> dict:
     state = row.get("state") if isinstance(row.get("state"), dict) else {}
     sample = state.get("sample") if isinstance(state.get("sample"), dict) else {}
@@ -154,6 +167,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--limit", type=int)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--resume", action="store_true", help="Append missing judge rows and skip existing outputs.")
+    parser.add_argument("--resume-from", action="append", default=[], help="Existing judge output file or directory to skip.")
+    parser.add_argument("--num-shards", type=int, default=1, help="Split deduplicated generation rows into N judge shards.")
+    parser.add_argument("--shard-index", type=int, default=0, help="Run one zero-based judge shard.")
     parser.add_argument(
         "--require-real",
         action="store_true",
@@ -185,12 +201,23 @@ def main(argv: list[str] | None = None) -> int:
     rows, deduplication_report = deduplicate_generation_rows(rows)
     if args.limit is not None:
         rows = rows[: args.limit]
+    if args.num_shards < 1:
+        raise SystemExit("--num-shards must be >= 1")
+    if not 0 <= args.shard_index < args.num_shards:
+        raise SystemExit("--shard-index must be in [0, num_shards)")
+    unsharded_input_rows = len(rows)
+    if args.num_shards > 1:
+        rows = [row for index, row in enumerate(rows) if index % args.num_shards == args.shard_index]
 
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     output = out_dir / "judge_scores.jsonl"
     raw_output = out_dir / "raw" / "judge_raw.jsonl"
     existing_judged = read_jsonl(output) if args.resume and output.exists() else []
+    for resume_file in _resume_files(args.resume_from):
+        if resume_file.resolve() == output.resolve():
+            continue
+        existing_judged.extend(read_jsonl(resume_file))
     completed_keys = {_judge_key(row) for row in existing_judged}
     if not args.resume:
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -228,6 +255,9 @@ def main(argv: list[str] | None = None) -> int:
             _append_jsonl(raw_output, judged_row)
     metadata = _run_metadata(judged, dry_run=dry_run, requested_model=cfg.get("requested_model"))
     metadata["input_rows"] = len(rows)
+    metadata["unsharded_input_rows"] = unsharded_input_rows
+    metadata["num_shards"] = args.num_shards
+    metadata["shard_index"] = args.shard_index
     metadata["generation_deduplication"] = deduplication_report
     metadata["resume"] = bool(args.resume)
     metadata["existing_output_rows"] = len(existing_judged)

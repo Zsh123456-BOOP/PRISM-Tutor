@@ -64,6 +64,23 @@ def test_oracle_routing_handles_list_valued_gold_fields() -> None:
     assert "misconception" in plan.agents
 
 
+def test_oracle_routing_reads_unified_schema_gold_metadata() -> None:
+    mathdial = {
+        "sample_id": "m1",
+        "problem_text": "How many spoons?",
+        "metadata": {"ground_truth": "10"},
+    }
+    bridge = {
+        "sample_id": "b1",
+        "problem_text": "Dialogue history",
+        "tutor_response": "Ask a targeted question.",
+        "student_error": "guess",
+    }
+
+    assert oracle_routing_plan(mathdial).metadata["upper_bound"] is True
+    assert oracle_routing_plan(bridge).metadata["upper_bound"] is True
+
+
 def test_baseline_dry_run_keeps_model_generation_config_and_samples_aligned(tmp_path: Path) -> None:
     result = run_generation(
         RunnerOptions(

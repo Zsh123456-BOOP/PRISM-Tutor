@@ -112,9 +112,21 @@ def _has_value(value: Any) -> bool:
 
 
 def oracle_routing_plan(sample: dict[str, Any]) -> BaselinePlan:
+    metadata = sample.get("metadata") if isinstance(sample.get("metadata"), dict) else {}
     has_gold = any(
-        _has_value(sample.get(key))
-        for key in ("gold_answer", "gold_misconception", "misconception_label", "teacher_response")
+        _has_value(value)
+        for value in (
+            sample.get("gold_answer"),
+            sample.get("gold_misconception"),
+            sample.get("misconception_label"),
+            sample.get("teacher_response"),
+            sample.get("tutor_response"),
+            sample.get("student_error"),
+            sample.get("remediation_strategy"),
+            metadata.get("ground_truth"),
+            metadata.get("correct_answer"),
+            metadata.get("student_incorrect_solution"),
+        )
     )
     if not has_gold:
         return BaselinePlan([], {"strategy": "oracle_routing", "skipped": True, "skip_reason": "missing_gold_label"})

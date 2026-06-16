@@ -382,6 +382,61 @@ def test_run_judge_resume_skips_existing_rows(tmp_path):
     assert metadata["new_output_rows"] == 1
 
 
+def test_run_judge_shards_and_skips_resume_source(tmp_path):
+    input_path = tmp_path / "generations.jsonl"
+    rows = [
+        {
+            "sample_id": f"s{i}",
+            "dataset": "mathdial",
+            "split": "test",
+            "method": "single_tutor",
+            "final_response": f"Try case {i}.",
+        }
+        for i in range(4)
+    ]
+    input_path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+    resume_dir = tmp_path / "existing"
+    resume_dir.mkdir()
+    existing = {
+        "sample_id": "s1",
+        "dataset": "mathdial",
+        "method": "single_tutor",
+        "candidate_label": "single_tutor",
+        "raw_response": "{}",
+        "parsed_score": {"overall": 3},
+        "error": None,
+        "metadata": {"actual_model": "mock-judge", "dry_run": True},
+    }
+    (resume_dir / "judge_scores.jsonl").write_text(json.dumps(existing) + "\n", encoding="utf-8")
+    output_dir = tmp_path / "judge_shard"
+
+    rc = run_judge.main(
+        [
+            "--input",
+            str(input_path),
+            "--output_dir",
+            str(output_dir),
+            "--resume",
+            "--resume-from",
+            str(resume_dir),
+            "--num-shards",
+            "2",
+            "--shard-index",
+            "1",
+        ]
+    )
+
+    judged = [json.loads(line) for line in (output_dir / "judge_scores.jsonl").read_text(encoding="utf-8").splitlines()]
+    metadata = json.loads((output_dir / "judge_metadata.json").read_text(encoding="utf-8"))
+    assert rc == 0
+    assert [row["sample_id"] for row in judged] == ["s3"]
+    assert metadata["unsharded_input_rows"] == 4
+    assert metadata["input_rows"] == 2
+    assert metadata["existing_output_rows"] == 1
+    assert metadata["skipped_existing_rows"] == 1
+    assert metadata["new_output_rows"] == 1
+
+
 def test_run_judge_metadata_summarizes_multiple_actual_models():
     judged = [
         {
