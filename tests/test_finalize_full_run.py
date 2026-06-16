@@ -20,6 +20,8 @@ def _write_plan(
     *,
     error_jobs: set[int] | None = None,
     commits: list[str | None] | None = None,
+    git_freeze: bool = True,
+    dirty_at_plan: bool = False,
 ) -> Path:
     error_jobs = error_jobs or set()
     jobs = []
@@ -52,8 +54,18 @@ def _write_plan(
                 },
             }
         )
+    payload = {"output_dir": str(tmp_path / "out"), "jobs": jobs}
+    if git_freeze:
+        payload["git_freeze"] = {
+            "enabled": True,
+            "commit": "abc123",
+            "branch": "main",
+            "dirty_at_plan": dirty_at_plan,
+            "status_short_at_plan": [" M file.py"] if dirty_at_plan else [],
+            "allow_dirty_git": False,
+        }
     plan = tmp_path / "plan.json"
-    plan.write_text(json.dumps({"output_dir": str(tmp_path / "out"), "jobs": jobs}), encoding="utf-8")
+    plan.write_text(json.dumps(payload), encoding="utf-8")
     return plan
 
 
@@ -197,6 +209,50 @@ def test_finalize_formal_run_judge_satisfies_judge_source_gate(tmp_path: Path) -
     assert rc == 0
 
 
+def test_finalize_formal_requires_git_frozen_shard_plan(tmp_path: Path) -> None:
+    plan = _write_plan(tmp_path, ["completed"], git_freeze=False)
+
+    try:
+        finalize.main(
+            [
+                "--plan",
+                str(plan),
+                "--output-dir",
+                str(tmp_path / "out"),
+                "--manifest",
+                str(tmp_path / "manifest.json"),
+                "--run-judge",
+                "--dry-run",
+            ]
+        )
+    except SystemExit as exc:
+        assert "shard_plan_not_git_frozen" in str(exc)
+    else:
+        raise AssertionError("Expected formal finalization without git-frozen plan to fail")
+
+
+def test_finalize_formal_refuses_dirty_git_frozen_shard_plan(tmp_path: Path) -> None:
+    plan = _write_plan(tmp_path, ["completed"], dirty_at_plan=True)
+
+    try:
+        finalize.main(
+            [
+                "--plan",
+                str(plan),
+                "--output-dir",
+                str(tmp_path / "out"),
+                "--manifest",
+                str(tmp_path / "manifest.json"),
+                "--run-judge",
+                "--dry-run",
+            ]
+        )
+    except SystemExit as exc:
+        assert "shard_plan_created_from_dirty_worktree" in str(exc)
+    else:
+        raise AssertionError("Expected formal finalization with dirty git-frozen plan to fail")
+
+
 def test_finalize_formal_refuses_mixed_generation_commits_without_override(tmp_path: Path) -> None:
     plan = _write_plan(tmp_path, ["completed", "completed"], commits=["abc123", "def456"])
 
@@ -291,6 +347,8 @@ def test_finalize_dry_run_writes_planned_manifest(tmp_path: Path) -> None:
     assert payload["reproducibility"]["python_executable"]
     assert "git" in payload["reproducibility"]
     assert "package_versions" in payload["reproducibility"]
+    assert payload["shard_plan_git_freeze"]["enabled"] is True
+    assert payload["shard_plan_git_freeze"]["commit"] == "abc123"
     assert payload["generation_manifest_git"]["commit_counts"] == {"abc123": 1}
     assert payload["generation_manifest_git"]["missing_manifest_count"] == 1
 

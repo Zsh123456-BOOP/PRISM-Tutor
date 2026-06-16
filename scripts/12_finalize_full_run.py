@@ -75,6 +75,19 @@ def _generation_manifest_git_summary(plan_path: str | Path) -> dict[str, Any]:
     }
 
 
+def _shard_plan_git_freeze_summary(plan_path: str | Path) -> dict[str, Any]:
+    plan = shard_planner.load_plan(plan_path)
+    freeze = plan.get("git_freeze") if isinstance(plan.get("git_freeze"), dict) else {}
+    return {
+        "enabled": bool(freeze.get("enabled")),
+        "commit": freeze.get("commit"),
+        "branch": freeze.get("branch"),
+        "dirty_at_plan": bool(freeze.get("dirty_at_plan")),
+        "status_short_at_plan": freeze.get("status_short_at_plan") or [],
+        "allow_dirty_git": bool(freeze.get("allow_dirty_git")),
+    }
+
+
 def _require_complete(summary: dict[str, Any], allow_incomplete: bool) -> None:
     incomplete = summary["by_status"].copy()
     completed = int(incomplete.pop("completed", 0))
@@ -115,6 +128,23 @@ def _require_formal_flag_consistency(args: argparse.Namespace) -> None:
         raise SystemExit(
             "Smoke-only finalization flags require --allow-incomplete: "
             + ", ".join(smoke_flags)
+        )
+
+
+def _require_shard_plan_git_freeze(summary: dict[str, Any], args: argparse.Namespace) -> None:
+    if args.allow_incomplete:
+        return
+    failures = []
+    if not summary.get("enabled"):
+        failures.append({"reason": "shard_plan_not_git_frozen"})
+    if not summary.get("commit"):
+        failures.append({"reason": "missing_shard_plan_commit"})
+    if summary.get("dirty_at_plan"):
+        failures.append({"reason": "shard_plan_created_from_dirty_worktree"})
+    if failures:
+        raise SystemExit(
+            "Formal finalization requires a clean git-frozen shard plan: "
+            + json.dumps(failures, ensure_ascii=False, sort_keys=True)
         )
 
 
@@ -378,10 +408,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     summary = _status_summary(args.plan)
+    shard_plan_git_freeze = _shard_plan_git_freeze_summary(args.plan)
     generation_manifest_git = _generation_manifest_git_summary(args.plan)
     _require_complete(summary, args.allow_incomplete)
-    _require_generation_manifest_git_consistency(generation_manifest_git, args)
     _require_formal_flag_consistency(args)
+    _require_shard_plan_git_freeze(shard_plan_git_freeze, args)
+    _require_generation_manifest_git_consistency(generation_manifest_git, args)
     _require_human_agreement_inputs(args)
     _require_formal_judge_source(args)
     completion = _completion_summary(summary)
@@ -401,6 +433,7 @@ def main(argv: list[str] | None = None) -> int:
         "allow_mixed_generation_commits": args.allow_mixed_generation_commits,
         "invocation": _invocation_metadata(args, argv),
         "reproducibility": collect_reproducibility_metadata(),
+        "shard_plan_git_freeze": shard_plan_git_freeze,
         "generation_manifest_git": generation_manifest_git,
         "shard_status": summary,
         **completion,
@@ -425,6 +458,7 @@ def main(argv: list[str] | None = None) -> int:
                 "allow_mixed_generation_commits": args.allow_mixed_generation_commits,
                 "allow_incomplete": args.allow_incomplete,
                 "dry_run": args.dry_run,
+                "shard_plan_git_freeze": shard_plan_git_freeze,
             },
             ensure_ascii=False,
             indent=2,
