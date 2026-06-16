@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-本仓库已经具备 Task Card 01-16 的可运行代码骨架、mock/dry-run 端到端链路，以及服务器上的 Qwen3-8B vLLM live smoke 链路。MathDial、Bridge 与 MaE Math Misconceptions 三个真实数据集均已下载、传输到服务器并完成 schema build。Exp0-Exp6 已完成真实 Qwen live smoke（limit=1）与 downstream metrics/tables/figures/artifact smoke；真实 DeepSeek judge 已对 live smoke 123 条 generation 完成评分。runner 已支持 sample-level sharding，用于拆分全量正式实验，并已支持 `maintain --target-running N` 与 `supervise` 可恢复补齐后台并发。PRISM runtime 现在会从 `configs/default.yaml` 注入 risk weights、thresholds、budget 与 commit threshold；Exp5 ablation 会真实禁用或替换对应模块/风险信号；Exp6 robustness 会展开 noisy-agent probability × token budget 变体，并把 deterministic noisy injection 参数写入 raw log。全量完成后可用 `scripts/12_finalize_full_run.py` gated finalization 生成 metrics/tables/figures/human audit sample/paper artifacts；finalization manifest/stdout 会输出 completed/total/can_finalize/planned_steps、命令 invocation、reproducibility metadata、unresolved error_rows 与 raw_error_rows，并会把每个后处理 step 的 stdout/stderr 保存到 `outputs/full_run/logs/finalization`；formal finalization 会拒绝 incomplete shards 和 unresolved generation error rows，非 dry-run 时某一步失败会 fail-fast 并将后续步骤标记为 skipped；`--allow-mock-judge` 和 `--allow-unlabeled-agreement` 这类 smoke-only flag 在 formal 模式下会被入口 gate 拒绝；paper artifact exporter 会检查 `outputs/full_run/*` run-local 产物；human audit sampler 会在正式模式下要求 metrics、generation logs、judge scores 和 tables 全部存在，并用 generation logs 回填 blind CSV 所需 response/context 字段；finalization 支持人工标注完成后用 `--run-human-agreement` 在 paper artifact 前生成 run-local agreement report，并显式传入同目录 `preference_mapping.json`；formal `--run-human-agreement` 会在入口处要求 `human_audit_labeled.csv` 已存在，避免前置后处理跑完后才失败；table builder 会从 deduplicated record metrics 自动导出 Table 1-6 及 significance JSON；paper artifact exporter 可用 full-run shard plan 生成覆盖 Exp0-Exp6 的 experiment manifest，并记录 datasets、split、methods、job count、estimated records 和输出路径；reproducibility checklist 会记录 seed/config/model/generation、GPU、judge metadata、data/log paths、git 和 package versions；`scripts/11_plan_or_run_shards.py progress` 可从 supervisor log 输出完成率、近期吞吐、ETA 与 health summary，并可识别 running 高于或低于 supervisor target、zombie PID 和 unresolved generation errors。当前全量 Exp0-Exp6 正式实验已经开始运行并由服务器 supervisor 接管，但尚未完成；也尚未执行正式人工标注版 200 条 blind human audit。
+本仓库已经具备 Task Card 01-16 的可运行代码骨架、mock/dry-run 端到端链路，以及服务器上的 Qwen3-8B vLLM live smoke 链路。MathDial、Bridge 与 MaE Math Misconceptions 三个真实数据集均已下载、传输到服务器并完成 schema build。Exp0-Exp6 已完成真实 Qwen live smoke（limit=1）与 downstream metrics/tables/figures/artifact smoke；真实 DeepSeek judge 已对 live smoke 123 条 generation 完成评分。runner 已支持 sample-level sharding，用于拆分全量正式实验，并已支持 `maintain --target-running N` 与 `supervise` 可恢复补齐后台并发。PRISM runtime 现在会从 `configs/default.yaml` 注入 risk weights、thresholds、budget 与 commit threshold；Exp5 ablation 会真实禁用或替换对应模块/风险信号；Exp6 robustness 会展开 noisy-agent probability × token budget 变体，并把 deterministic noisy injection 参数写入 raw log。全量完成后可用 `scripts/12_finalize_full_run.py` gated finalization 生成 metrics/tables/figures/human audit sample/paper artifacts；finalization manifest/stdout 会输出 completed/total/can_finalize/planned_steps、命令 invocation、reproducibility metadata、unresolved error_rows 与 raw_error_rows，并会把每个后处理 step 的 stdout/stderr 保存到 `outputs/full_run/logs/finalization`；formal finalization 会拒绝 incomplete shards、unresolved generation error rows、缺失 judge source，以及 smoke-only flags，非 dry-run 时某一步失败会 fail-fast 并将后续步骤标记为 skipped；paper artifact exporter 会检查 `outputs/full_run/*` run-local 产物；human audit sampler 会在正式模式下要求 metrics、generation logs、judge scores 和 tables 全部存在，并用 generation logs 回填 blind CSV 所需 response/context 字段；finalization 支持人工标注完成后用 `--run-human-agreement` 在 paper artifact 前生成 run-local agreement report，并显式传入同目录 `preference_mapping.json`；formal `--run-human-agreement` 会在入口处要求 `human_audit_labeled.csv` 已存在，避免前置后处理跑完后才失败；table builder 会从 deduplicated record metrics 自动导出 Table 1-6 及 significance JSON；paper artifact exporter 可用 full-run shard plan 生成覆盖 Exp0-Exp6 的 experiment manifest，并记录 datasets、split、methods、job count、estimated records 和输出路径；reproducibility checklist 会记录 seed/config/model/generation、GPU、judge metadata、data/log paths、git 和 package versions；`scripts/11_plan_or_run_shards.py progress` 可从 supervisor log 输出完成率、近期吞吐、ETA 与 health summary，并可识别 running 高于或低于 supervisor target、zombie PID 和 unresolved generation errors。当前全量 Exp0-Exp6 正式实验已经开始运行并由服务器 supervisor 接管，但尚未完成；也尚未执行正式人工标注版 200 条 blind human audit。
 
 ## 已完成的代码路径
 
@@ -26,8 +26,8 @@
 ## 已验证命令
 
 - [x] 本机 `python -m compileall prism_tutor scripts data serving tests`
-- [x] 本机 `python -m pytest -q`，结果：190 passed。
-- [x] 服务器 `python -m pytest -q`，结果：190 passed。
+- [x] 本机 `python -m pytest -q`，结果：192 passed。
+- [x] 服务器 `python -m pytest -q`，结果：192 passed。
 - [x] `python scripts/00_prepare_env_check.py --config configs/default.yaml --dry-run`
 - [x] 服务器 env check dry-run：`CUDA_VISIBLE_DEVICES=2,3 python scripts/00_prepare_env_check.py --config configs/default.yaml --output /tmp/prism_env_check_latest.json --dry-run`，结果 `status=ok`，检测到 4 张 GPU，CUDA_VISIBLE_DEVICES 与配置一致。
 - [x] `python scripts/01_build_datasets.py --help`
@@ -57,8 +57,8 @@
 - [x] Shard plan/status/launch 工具验证：`outputs/shard_tool_smoke`，Exp0 8-shard dry-run plan，`launch --next` 后 1 completed / 7 pending，15 generation rows，0 error rows。
 - [x] Shard concurrency maintainer：`python scripts/11_plan_or_run_shards.py maintain --plan outputs/full_run/shard_plan.json --target-running 2 --max-launches 2`，当前 running 已达目标时不会重复启动 job。
 - [x] Shard supervisor：`python scripts/11_plan_or_run_shards.py supervise --plan outputs/full_run/shard_plan.json --target-running 18 --interval-seconds 120 --log-path outputs/full_run/logs/shards/supervisor_compact.jsonl`，服务器 PID `2472200`。
-- [x] Full-run finalization gate：`scripts/12_finalize_full_run.py --allow-incomplete --dry-run` 已在服务器真实 shard plan 上验证，默认不调用 judge，计划步骤为 auto metrics、tables、figures、human audit sample、paper artifacts；manifest/stdout 会输出 `completed_jobs`、`total_jobs`、`can_finalize`、`planned_steps`；formal 模式会拒绝 `--allow-mock-judge` 与 `--allow-unlabeled-agreement` 这两个 smoke-only flag。
-- [x] Full-run finalization latest dry-run：服务器真实 shard plan 当前 `249/1792` jobs completed，`can_finalize=false`，planned steps 仍为 auto metrics、tables、figures、human audit sample、paper artifacts，未调用 judge/API；`outputs/full_run/finalization_manifest.dry_run_latest.json` 已包含 invocation、git commit、Python executable、`error_rows=0` 和 `raw_error_rows=79`。
+- [x] Full-run finalization gate：`scripts/12_finalize_full_run.py --allow-incomplete --dry-run` 已在服务器真实 shard plan 上验证，默认不调用 judge，计划步骤为 auto metrics、tables、figures、human audit sample、paper artifacts；manifest/stdout 会输出 `completed_jobs`、`total_jobs`、`can_finalize`、`planned_steps`；formal 模式会拒绝缺失 judge source、`--allow-mock-judge` 与 `--allow-unlabeled-agreement` 这类 smoke-only flag。
+- [x] Full-run finalization latest dry-run：服务器真实 shard plan 当前 `266/1792` jobs completed，`can_finalize=false`，planned steps 仍为 auto metrics、tables、figures、human audit sample、paper artifacts，未调用 judge/API；`outputs/full_run/finalization_manifest.dry_run_latest.json` 已包含 invocation、git commit、Python executable、`error_rows=0` 和 `raw_error_rows=79`。
 - [x] Finalization step logs：`scripts/12_finalize_full_run.py` 非 dry-run 时会为每个后处理 step 保存 stdout/stderr，并在 manifest 记录日志路径。
 - [x] Paper artifact run-local path gate：`scripts/09_export_paper_artifacts.py --artifact-prefix outputs/full_run` 可让 reproducibility checklist 和 artifact index 检查 full-run 目录，而不是误查全局 `outputs/*`。
 - [x] Reproducibility checklist coverage：`scripts/09_export_paper_artifacts.py` 导出的 checklist 包含 seed、config、model、GPU、judge metadata、data/log paths、git 和 package versions。
@@ -67,7 +67,7 @@
 - [x] Exp5/Exp6 runtime variant coverage：Exp5 ablation 会真实禁用 risk estimator、QoS routing、budget controller、state commit 或对应风险项；Exp6 dry-run smoke 验证 `fixed_4/debate/generic_sparse/ours_full × noise{0.2,0.4} × budget{1000,2000,4000}` 展开为 24 个 method variants。
 - [x] Shard progress report：`python scripts/11_plan_or_run_shards.py progress --plan outputs/full_run/shard_plan.json --supervisor-log outputs/full_run/logs/shards/supervisor_compact.jsonl --rate-window 5` 已在服务器验证，health summary 当前为 `ok`，记录 `target_running`，并会提示 running 高于或低于目标并发；status report 会保留 `raw_error_rows`，但 formal gate 使用 unresolved `error_rows`。
 - [x] Partial full-run metrics dedupe check：服务器当前 partial logs 临时计算自动指标时，raw_generation_count `23693` 去重为 generation_count `23403`，duplicate_generation_count `290`，orphan_generation_count `0`；该检查未调用 judge/API。
-- [x] 正式 full_run 后台运行：已完成 259 个 shard，18 个 shard 正在 running；最新 generation_rows `23742`、error_rows `0`、raw_error_rows `79`，estimated_records `294053`，completion_fraction `0.08074054677218052`；recent_rows_per_minute `73.43172836813878`，ETA 约 `61.3519991078963` 小时；health summary 为 `ok`。
+- [x] 正式 full_run 后台运行：已完成 266 个 shard，19 个 shard 正在 running；最新 generation_rows `24238`、error_rows `0`、raw_error_rows `79`，estimated_records `294053`，completion_fraction `0.08233209659483154`；recent_rows_per_minute `75.24350732358457`，ETA 约 `59.77104860346746` 小时；health summary 为 `warn`，原因是 running 暂时高于 target 18，等待自然回落即可。
 
 ## 仍需服务器真实执行的项目
 
@@ -79,7 +79,7 @@
 - [x] 用 live smoke raw logs 重新生成 smoke 版 tables、figures、paper artifacts。
 - [x] 提供全量正式实验前的分片执行能力与规模估算 gate。
 - [x] 提供全量正式实验的 shard manifest、status、launch 和 maintain 工具：`scripts/11_plan_or_run_shards.py`。
-- [ ] 使用真实 Qwen3-8B endpoint 跑完全量 Exp0-Exp6 generation。目前已完成 259 个 shard，并由 supervisor/maintainer 维持运行；尚未完成全量 1792 个 job。
+- [ ] 使用真实 Qwen3-8B endpoint 跑完全量 Exp0-Exp6 generation。目前已完成 266 个 shard，并由 supervisor/maintainer 维持运行；尚未完成全量 1792 个 job。
 - [ ] 全量实验完成后执行正式 200 条 blind human audit，并填入人工标签后计算 agreement。
 - [ ] 用全量真实 raw logs 重新生成正式论文 tables、figures、paper artifacts。
 
