@@ -79,6 +79,17 @@ def _require_formal_flag_consistency(args: argparse.Namespace) -> None:
         )
 
 
+def _require_human_agreement_inputs(args: argparse.Namespace) -> None:
+    if not args.run_human_agreement or args.allow_unlabeled_agreement:
+        return
+    labeled_path = Path(args.output_dir) / "human_audit" / "human_audit_labeled.csv"
+    if not labeled_path.exists():
+        raise SystemExit(
+            "Formal human agreement requires labeled audit CSV before finalization: "
+            + str(labeled_path)
+        )
+
+
 def _cmd(*parts: str) -> list[str]:
     return [sys.executable, *parts]
 
@@ -274,6 +285,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     _require_formal_flag_consistency(args)
+    _require_human_agreement_inputs(args)
     summary = _status_summary(args.plan)
     _require_complete(summary, args.allow_incomplete)
     completion = _completion_summary(summary)

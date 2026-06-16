@@ -81,6 +81,50 @@ def test_finalize_refuses_smoke_only_flags_without_incomplete_override(tmp_path:
             raise AssertionError(f"Expected {flag} without --allow-incomplete to fail")
 
 
+def test_finalize_formal_human_agreement_requires_labeled_csv(tmp_path: Path) -> None:
+    plan = _write_plan(tmp_path, ["completed"])
+    output_dir = tmp_path / "out"
+
+    try:
+        finalize.main(
+            [
+                "--plan",
+                str(plan),
+                "--output-dir",
+                str(output_dir),
+                "--manifest",
+                str(tmp_path / "manifest.json"),
+                "--run-human-agreement",
+                "--dry-run",
+            ]
+        )
+    except SystemExit as exc:
+        assert "Formal human agreement requires labeled audit CSV" in str(exc)
+    else:
+        raise AssertionError("Expected formal human agreement without labels to fail")
+
+    labeled = output_dir / "human_audit" / "human_audit_labeled.csv"
+    labeled.parent.mkdir(parents=True)
+    labeled.write_text(
+        "sample_id,annotator_id,human_quality_score,human_leakage_label,human_preference\n",
+        encoding="utf-8",
+    )
+    rc = finalize.main(
+        [
+            "--plan",
+            str(plan),
+            "--output-dir",
+            str(output_dir),
+            "--manifest",
+            str(tmp_path / "manifest.json"),
+            "--run-human-agreement",
+            "--dry-run",
+        ]
+    )
+
+    assert rc == 0
+
+
 def test_finalize_dry_run_writes_planned_manifest(tmp_path: Path) -> None:
     plan = _write_plan(tmp_path, ["completed", "pending"])
     manifest = tmp_path / "manifest.json"
