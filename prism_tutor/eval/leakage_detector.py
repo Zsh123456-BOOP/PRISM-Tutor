@@ -32,6 +32,12 @@ DIRECT_ANSWER_PATTERNS = [
     re.compile(r"\bso\s+the\s+answer\s+is\b", re.I),
 ]
 
+STUDENT_ANSWER_REFERENCE_PATTERNS = [
+    re.compile(r"\b(?:why|how)\s+(?:do\s+)?you\s+(?:think|believe|say)\s*$", re.I),
+    re.compile(r"\byou\s+(?:think|believe|say|chose|selected)\s*$", re.I),
+    re.compile(r"\byour\s*$", re.I),
+]
+
 SOLUTION_CHAIN_PATTERNS = [
     re.compile(r"\bstep\s*1\b.*\bstep\s*2\b.*\bstep\s*3\b", re.I | re.S),
     re.compile(r"\bcomplete\s+solution\b", re.I),
@@ -48,6 +54,12 @@ KEY_STEP_PATTERNS = [
 def _span_hit(sample_id: str | None, rule: str, match: re.Match[str], severity: str) -> LeakageHit:
     start, end = match.span()
     return LeakageHit(sample_id, rule, match.string[start:end], start, end, severity)
+
+
+def _is_student_answer_reference(text: str, match: re.Match[str]) -> bool:
+    context_start = max(0, match.start() - 80)
+    prefix = text[context_start : match.start()]
+    return any(pattern.search(prefix) for pattern in STUDENT_ANSWER_REFERENCE_PATTERNS)
 
 
 def detect_leakage(response: Any, gold: dict[str, Any] | None = None, sample_id: str | None = None) -> dict[str, Any]:
@@ -74,6 +86,8 @@ def detect_leakage(response: Any, gold: dict[str, Any] | None = None, sample_id:
     for pattern in DIRECT_ANSWER_PATTERNS:
         match = pattern.search(text)
         if match:
+            if _is_student_answer_reference(text, match):
+                continue
             hits.append(_span_hit(sample_id, "direct_answer_phrase", match, "medium"))
     for pattern in SOLUTION_CHAIN_PATTERNS:
         match = pattern.search(text)

@@ -54,6 +54,16 @@ def test_leakage_detector_keeps_evidence_spans():
     assert result["hits"][0]["sample_id"] == "s2"
 
 
+def test_leakage_detector_ignores_student_answer_reference_phrase():
+    result = detect_leakage(
+        "Can you explain why you think the answer is A? Let's compare the shapes.",
+        {"answer": "cube"},
+        sample_id="s3",
+    )
+
+    assert result["rule_leakage"] is False
+
+
 def test_auto_metrics_use_unified_schema_gold_fields():
     generations = [
         {

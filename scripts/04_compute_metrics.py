@@ -107,6 +107,9 @@ def main(argv: list[str] | None = None) -> int:
         "state_conflict_rate",
         "incorrect_commit_rate",
         "tentative_update_rate",
+        "unsafe_commit_rate",
+        "tentative_when_conflict_rate",
+        "commit_with_evidence_rate",
         "state_metric_coverage",
     ]
     leakage_fields = [
