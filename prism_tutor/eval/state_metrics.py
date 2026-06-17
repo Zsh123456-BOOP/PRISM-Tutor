@@ -11,7 +11,32 @@ def _events(record: dict[str, Any]) -> list[dict[str, Any]]:
         value = state.get(key) if key in state else record.get(key)
         if isinstance(value, list):
             return [item for item in value if isinstance(item, dict)]
+    agent_outputs = state.get("agent_outputs") if isinstance(state.get("agent_outputs"), dict) else {}
+    commit_outputs = agent_outputs.get("state_commit") or record.get("state_commit") or []
+    if isinstance(commit_outputs, dict):
+        commit_outputs = [commit_outputs]
+    if isinstance(commit_outputs, list):
+        return _events_from_commit_outputs([item for item in commit_outputs if isinstance(item, dict)])
     return []
+
+
+def _events_from_commit_outputs(commit_outputs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    events: list[dict[str, Any]] = []
+    for decision in commit_outputs:
+        status = str(decision.get("status") or "")
+        conflict = status == "tentative"
+        for update in decision.get("committed_updates") or []:
+            if isinstance(update, dict):
+                events.append({"type": "state_commit", "status": status, "conflict": False, "tentative": False, **update})
+        for update in decision.get("tentative_updates") or []:
+            if isinstance(update, dict):
+                events.append({"type": "tentative_update", "status": status, "conflict": conflict, "tentative": True, **update})
+        for update in decision.get("rejected_updates") or []:
+            if isinstance(update, dict):
+                events.append({"type": "rejected_update", "status": status, "conflict": conflict, "tentative": False, **update})
+        if status and not events:
+            events.append({"type": "state_commit", "status": status, "conflict": conflict, "tentative": False})
+    return events
 
 
 def evaluate_state_metrics(record: dict[str, Any]) -> dict[str, Any]:

@@ -17,7 +17,7 @@ from prism_tutor.runtime.graph_state import TutorGraphState
 from prism_tutor.runtime.budget_controller import BudgetConfig
 from prism_tutor.runtime.prism_graph import AGENT_REGISTRY, PrismGraphConfig, build_prism_graph
 from prism_tutor.runtime.risk_estimator import RiskConfig
-from prism_tutor.runtime.state_commit import CommitConfig
+from prism_tutor.runtime.state_commit import CommitConfig, StateCommitter
 from prism_tutor.logging.manifest import write_experiment_manifest
 from prism_tutor.serving.endpoints import EndpointRegistry, strip_think_blocks
 from prism_tutor.utils.config import deep_merge, load_config, load_yaml
@@ -198,6 +198,10 @@ def _prism_graph_config_from_run_config(config: dict[str, Any], method: MethodSp
     weights = dict(config.get("risk_weights", {}))
     if not weights:
         weights = RiskConfig().weights
+    base_method = _base_method_name(method)
+    token_budget = int(method.variant.get("token_budget", budget.get("max_tokens_per_case", 20000)))
+    if base_method == "ours_full" and "token_budget" not in method.variant:
+        token_budget = max(token_budget, int(budget.get("full_system_max_tokens_per_case", 8000)))
     risk_config = RiskConfig(
         weights=weights,
         low_threshold=float(thresholds.get("medium_risk", thresholds.get("low_risk", 0.33))),
@@ -207,7 +211,7 @@ def _prism_graph_config_from_run_config(config: dict[str, Any], method: MethodSp
         risk=risk_config,
         budget=BudgetConfig(
             max_rounds=int(budget.get("max_rounds", 2)),
-            max_tokens=int(method.variant.get("token_budget", budget.get("max_tokens_per_case", 20000))),
+            max_tokens=token_budget,
         ),
         commit=CommitConfig(
             commit_confidence_threshold=float(thresholds.get("misconception_confidence_commit", 0.7)),
@@ -395,7 +399,19 @@ def _run_live_baseline(sample: dict[str, Any], method: MethodSpec, client: BaseL
             )
             build_prism_graph(client=client, config=graph_config)._maybe_inject_noisy_output(state, record)
         state.add_call(record)
+    _apply_baseline_state_commit(state, method)
     return _state_to_method_result(state, method=method)
+
+
+def _apply_baseline_state_commit(state: TutorGraphState, method: MethodSpec) -> None:
+    base_name = _base_method_name(method)
+    if base_name == "naive_shared_memory":
+        decision = StateCommitter().commit_naive(state)
+    elif base_name in {"single_writer", "two_phase_commit"}:
+        decision = StateCommitter().commit(state)
+    else:
+        return
+    state.agent_outputs.setdefault("state_commit", []).append(decision.model_dump(mode="json"))
 
 
 def _run_live_method(sample: dict[str, Any], method: MethodSpec, client: BaseLLMClient, config: dict[str, Any]) -> dict[str, Any]:

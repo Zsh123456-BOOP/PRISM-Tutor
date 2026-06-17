@@ -1,3 +1,6 @@
+from prism_tutor.agents.base_client import BaseLLMClient, LLMClientConfig
+from prism_tutor.experiments.method_registry import MethodSpec
+from prism_tutor.experiments.runner import _run_live_baseline
 from prism_tutor.runtime.graph_state import TutorGraphState
 from prism_tutor.runtime.prism_graph import PrismGraphConfig, build_prism_graph
 from prism_tutor.runtime.qos_router import QoSRouter
@@ -109,6 +112,80 @@ def test_prism_graph_callable_runs_in_mock_mode():
     assert result.termination_reason == "completed"
     assert result.llm_calls
     assert "state_commit" in result.agent_outputs
+
+
+def test_prism_graph_m3_runs_state_manager_before_final_tutor():
+    client = BaseLLMClient(
+        LLMClientConfig(
+            mock_responses={
+                "state_manager": {
+                    "proposed_updates": [
+                        {
+                            "field": "weak_skills",
+                            "operation": "add",
+                            "value": "fractions",
+                            "confidence": 0.9,
+                            "evidence": "student confused denominator",
+                        }
+                    ],
+                    "conflicts": [],
+                    "confidence": 0.9,
+                }
+            }
+        )
+    )
+    graph = build_prism_graph("M3", client=client)
+
+    result = graph.invoke(
+        {
+            "sample": {
+                "sample_id": "s1",
+                "problem_text": "Which fraction is larger, 1/3 or 1/4?",
+                "student_utterance": "I think 1/4 is larger.",
+                "misconception_label": "denominator_ordering",
+                "metadata": {"ground_truth": "1/3"},
+            },
+            "method": "M3",
+        }
+    )
+
+    assert "state_manager" in result.selected_agents
+    assert result.selected_agents.index("state_manager") < result.selected_agents.index("final_tutor")
+    assert result.agent_outputs["state_commit"][-1]["status"] == "committed"
+    assert result.student_state.weak_skills == ["fractions"]
+
+
+def test_live_state_baselines_commit_state_updates():
+    client = BaseLLMClient(
+        LLMClientConfig(
+            mock_responses={
+                "state_manager": {
+                    "proposed_updates": [
+                        {
+                            "field": "active_misconceptions",
+                            "operation": "add",
+                            "value": "sign_error",
+                            "confidence": 0.9,
+                            "evidence": "student inverted the sign",
+                        }
+                    ],
+                    "conflicts": [],
+                    "confidence": 0.9,
+                }
+            }
+        )
+    )
+    method = MethodSpec(
+        "two_phase_commit",
+        "state",
+        "Two-phase state commit",
+        ("state_proposer", "verifier", "state_commit", "final_tutor"),
+    )
+
+    result = _run_live_baseline({"sample_id": "s1", "dataset": "mathdial", "split": "test"}, method, client)
+
+    assert result["state"]["agent_outputs"]["state_commit"][-1]["status"] == "committed"
+    assert result["state"]["student_state"]["active_misconceptions"] == ["sign_error"]
 
 
 def test_prism_graph_can_disable_state_commit_for_ablation():

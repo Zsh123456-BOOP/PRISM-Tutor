@@ -93,6 +93,8 @@ class PrismGraph:
             selected = list(self.config.router.high_agents)
         else:
             selected = self.router.select_agents(risk)
+        if self.method == "M3" and not self._module_disabled("state_commit"):
+            selected = self._ensure_state_manager_for_commit(selected)
         graph_state.selected_agents.extend(selected)
         self._run_agents(graph_state, selected)
 
@@ -146,6 +148,19 @@ class PrismGraph:
 
     def _module_disabled(self, module: str) -> bool:
         return module in set(self.config.disabled_modules)
+
+    @staticmethod
+    def _ensure_state_manager_for_commit(selected: list[str]) -> list[str]:
+        if "state_manager" in selected:
+            return selected
+        ordered = list(selected)
+        try:
+            final_index = ordered.index("final_tutor")
+        except ValueError:
+            ordered.append("state_manager")
+        else:
+            ordered.insert(final_index, "state_manager")
+        return ordered
 
     def _disabled_risk(self, state: TutorGraphState) -> Any:
         difficulty = estimate_risk(state, self.config.risk).estimated_difficulty

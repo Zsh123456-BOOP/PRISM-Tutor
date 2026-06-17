@@ -140,6 +140,48 @@ def test_auto_metrics_read_live_generation_accounting_fields():
     assert aggregate["latency_mean"] == 8.0
 
 
+def test_state_metrics_read_live_state_commit_output():
+    generations = [
+        {
+            "sample_id": "s1",
+            "dataset": "mathdial",
+            "split": "test",
+            "method": "ours_full",
+            "token_usage": {"total_tokens": 12, "source": "api"},
+            "selected_agents": ["state_manager", "final_tutor"],
+            "rounds": 1,
+            "final_response": "Try checking the prior misconception first.",
+            "parse_success": True,
+            "state": {
+                "agent_outputs": {
+                    "state_commit": [
+                        {
+                            "status": "committed",
+                            "committed_updates": [
+                                {
+                                    "field": "weak_skills",
+                                    "operation": "add",
+                                    "value": "fractions",
+                                    "confidence": 0.9,
+                                }
+                            ],
+                            "tentative_updates": [],
+                            "rejected_updates": [],
+                        }
+                    ]
+                }
+            },
+        }
+    ]
+
+    row = compute_auto_metrics(generations, [{"sample_id": "s1", "dataset": "mathdial"}])["record_metrics"][0]
+
+    assert row["state_event_count"] == 1
+    assert row["state_metric_coverage"] == 1.0
+    assert row["state_conflict_rate"] == 0.0
+    assert row["tentative_update_rate"] == 0.0
+
+
 def test_parse_failed_records_are_kept_but_structured_metrics_are_missing():
     generations = [
         {
