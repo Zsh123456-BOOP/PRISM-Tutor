@@ -179,6 +179,28 @@ def test_verifier_schema_accepts_issue_object():
     assert output.issues[0].issue_type == "leakage"
 
 
+def test_verifier_issue_normalizes_common_recommended_agent_aliases():
+    corrective = VerifierIssue.model_validate(
+        {
+            "issue_type": "pedagogy",
+            "severity": "medium",
+            "message": "Needs a corrective teaching move.",
+            "recommended_agent": "corrective",
+        }
+    )
+    verifier = VerifierIssue.model_validate(
+        {
+            "issue_type": "other",
+            "severity": "low",
+            "message": "Needs another verification pass.",
+            "recommended_agent": "verifier",
+        }
+    )
+
+    assert corrective.recommended_agent == "pedagogy"
+    assert verifier.recommended_agent is None
+
+
 def test_final_tutor_requires_response():
     with pytest.raises(ValidationError):
         FinalTutorOutput(response="", withheld_answer=True, confidence=0.5, safety_notes=[])

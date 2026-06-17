@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .types import SCHEMA_VERSION
 
@@ -71,6 +71,31 @@ class VerifierIssue(StrictModel):
         "state_manager",
         "final_tutor",
     ] | None = None
+
+    @field_validator("recommended_agent", mode="before")
+    @classmethod
+    def normalize_recommended_agent(cls, value: Any) -> Any:
+        if value is None or value == "":
+            return None
+        normalized = str(value).strip().lower().replace("-", "_").replace(" ", "_")
+        aliases = {
+            "corrective": "pedagogy",
+            "conceptual": "pedagogy",
+            "scaffold": "pedagogy",
+            "scaffolding": "pedagogy",
+            "socratic": "pedagogy",
+            "worked_example": "pedagogy",
+            "tutor": "hint",
+            "critic": None,
+            "verifier": None,
+            "verification": None,
+            "state": "state_manager",
+            "state_proposer": "state_manager",
+            "state_commit": "state_manager",
+            "final": "final_tutor",
+            "final_response": "final_tutor",
+        }
+        return aliases.get(normalized, normalized)
 
 
 class VerifierOutput(SchemaVersionMixin):
