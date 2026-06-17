@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .errors import GraphErrorRecord
 from .graph_state import TutorGraphState
 
 
@@ -26,7 +25,6 @@ class BudgetController:
         if state.total_tokens >= self.config.max_tokens:
             state.termination_reason = "token_budget"
             state.budget_exhausted = True
-            state.errors.append(GraphErrorRecord(code="token_budget", message="token budget exhausted", recoverable=False))
             return False
         verifier_outputs = state.agent_outputs.get("verifier") or []
         latest = verifier_outputs[-1] if verifier_outputs else {}

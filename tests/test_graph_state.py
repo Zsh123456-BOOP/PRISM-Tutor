@@ -75,4 +75,4 @@ def test_budget_controller_marks_max_rounds_and_token_budget():
     assert token_budget.should_continue(token_state) is False
     assert token_state.termination_reason == "token_budget"
     assert token_state.budget_exhausted is True
-    assert token_state.errors[0].code == "token_budget"
+    assert token_state.errors == []
