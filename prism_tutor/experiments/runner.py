@@ -201,7 +201,7 @@ def _prism_graph_config_from_run_config(config: dict[str, Any], method: MethodSp
     base_method = _base_method_name(method)
     token_budget = int(method.variant.get("token_budget", budget.get("max_tokens_per_case", 20000)))
     if base_method == "ours_full" and "token_budget" not in method.variant:
-        token_budget = max(token_budget, int(budget.get("full_system_max_tokens_per_case", 12000)))
+        token_budget = max(token_budget, int(budget.get("full_system_max_tokens_per_case", 20000)))
     risk_config = RiskConfig(
         weights=weights,
         low_threshold=float(thresholds.get("medium_risk", thresholds.get("low_risk", 0.33))),
