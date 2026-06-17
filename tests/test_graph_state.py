@@ -76,3 +76,18 @@ def test_budget_controller_marks_max_rounds_and_token_budget():
     assert token_state.termination_reason == "token_budget"
     assert token_state.budget_exhausted is True
     assert token_state.errors == []
+
+
+def test_budget_controller_does_not_schedule_final_tutor_for_deliberation():
+    state = TutorGraphState(sample={"sample_id": "s3"}, method="M2")
+    state.agent_outputs["verifier"] = [
+        {
+            "approved": False,
+            "issues": [
+                {"recommended_agent": "final_tutor"},
+                {"recommended_agent": "pedagogy"},
+            ],
+        }
+    ]
+
+    assert BudgetController().next_agents(state) == ["pedagogy", "verifier"]

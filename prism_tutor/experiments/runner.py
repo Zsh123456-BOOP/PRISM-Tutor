@@ -199,6 +199,10 @@ def _prism_graph_config_from_run_config(config: dict[str, Any], method: MethodSp
     if not weights:
         weights = RiskConfig().weights
     base_method = _base_method_name(method)
+    experiment_name = str(config.get("experiment", {}).get("name", ""))
+    variant = dict(method.variant)
+    if experiment_name == "exp3_state_commit" and base_method == "ours_full":
+        variant["state_commit_focus"] = True
     token_budget = int(method.variant.get("token_budget", budget.get("max_tokens_per_case", 20000)))
     if base_method == "ours_full" and "token_budget" not in method.variant:
         token_budget = max(token_budget, int(budget.get("full_system_max_tokens_per_case", 20000)))
@@ -217,10 +221,12 @@ def _prism_graph_config_from_run_config(config: dict[str, Any], method: MethodSp
             commit_confidence_threshold=float(thresholds.get("misconception_confidence_commit", 0.7)),
             tentative_confidence_threshold=float(thresholds.get("state_conflict_block_threshold", 0.4)),
         ),
-        variant=method.variant,
-        noisy_agent_probability=float(method.variant.get("noisy_agent_probability", 0.0)),
-        noisy_agent_seed=int(method.variant.get("seed", config.get("seed", 42))),
+        variant=variant,
+        noisy_agent_probability=float(variant.get("noisy_agent_probability", 0.0)),
+        noisy_agent_seed=int(variant.get("seed", config.get("seed", 42))),
     )
+    if variant.get("state_commit_focus"):
+        graph_config.disabled_modules.append("budget_controller")
     ablation = str(method.variant.get("ablation", ""))
     if ablation == "ablate_risk_estimator":
         graph_config.disabled_modules.append("risk_estimator")

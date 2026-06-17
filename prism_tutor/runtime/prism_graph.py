@@ -95,6 +95,10 @@ class PrismGraph:
             selected = self.router.select_agents(risk)
         if self.method == "M3" and not self._module_disabled("state_commit"):
             selected = self._ensure_state_manager_for_commit(selected)
+        defer_final_tutor = self._should_defer_final_tutor()
+        needs_final_tutor = "final_tutor" in selected
+        if defer_final_tutor:
+            selected = self._without_final_tutor(selected)
         graph_state.selected_agents.extend(selected)
         self._run_agents(graph_state, selected)
 
@@ -103,6 +107,11 @@ class PrismGraph:
                 next_agents = self.budget.next_agents(graph_state)
                 if not next_agents:
                     break
+                if defer_final_tutor:
+                    needs_final_tutor = needs_final_tutor or "final_tutor" in next_agents
+                    next_agents = self._without_final_tutor(next_agents)
+                    if not next_agents:
+                        break
                 graph_state.rounds += 1
                 graph_state.selected_agents.extend(next_agents)
                 self._run_agents(graph_state, next_agents)
@@ -113,6 +122,9 @@ class PrismGraph:
             else:
                 decision = self.committer.commit(graph_state)
             graph_state.agent_outputs.setdefault("state_commit", []).append(decision.model_dump(mode="json"))
+
+        if defer_final_tutor and needs_final_tutor:
+            self._run_final_tutor_once(graph_state)
 
         if graph_state.termination_reason is None:
             graph_state.termination_reason = "completed"
@@ -148,6 +160,19 @@ class PrismGraph:
 
     def _module_disabled(self, module: str) -> bool:
         return module in set(self.config.disabled_modules)
+
+    def _should_defer_final_tutor(self) -> bool:
+        return self.method == "M2" or (self.method == "M3" and not self._module_disabled("state_commit"))
+
+    @staticmethod
+    def _without_final_tutor(selected: list[str]) -> list[str]:
+        return [agent for agent in selected if agent != "final_tutor"]
+
+    def _run_final_tutor_once(self, state: TutorGraphState) -> None:
+        if any(call.get("agent_name") == "final_tutor" for call in state.llm_calls):
+            return
+        state.selected_agents.append("final_tutor")
+        self._run_agents(state, ["final_tutor"])
 
     @staticmethod
     def _ensure_state_manager_for_commit(selected: list[str]) -> list[str]:

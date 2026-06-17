@@ -37,7 +37,8 @@ class BudgetController:
         for issue in latest.get("issues", []):
             recommended = issue.get("recommended_agent")
             if recommended:
-                selected.append(recommended)
+                if self._can_deliberate_with(str(recommended)):
+                    selected.append(str(recommended))
                 continue
             issue_type = issue.get("issue_type")
             if issue_type == "leakage":
@@ -53,3 +54,7 @@ class BudgetController:
         if selected:
             selected.append("verifier")
         return list(dict.fromkeys(selected))
+
+    @staticmethod
+    def _can_deliberate_with(agent_name: str) -> bool:
+        return agent_name in {"solver", "misconception", "pedagogy", "hint", "state_manager", "verifier"}

@@ -1,6 +1,6 @@
 from prism_tutor.agents.base_client import BaseLLMClient, LLMClientConfig
 from prism_tutor.experiments.method_registry import MethodSpec
-from prism_tutor.experiments.runner import _run_live_baseline
+from prism_tutor.experiments.runner import _prism_graph_config_from_run_config, _run_live_baseline
 from prism_tutor.runtime.graph_state import TutorGraphState
 from prism_tutor.runtime.prism_graph import PrismGraphConfig, build_prism_graph
 from prism_tutor.runtime.qos_router import QoSRouter
@@ -152,6 +152,8 @@ def test_prism_graph_m3_runs_state_manager_before_final_tutor():
 
     assert "state_manager" in result.selected_agents
     assert result.selected_agents.index("state_manager") < result.selected_agents.index("final_tutor")
+    assert result.selected_agents.count("final_tutor") == 1
+    assert sum(call["agent_name"] == "final_tutor" for call in result.llm_calls) == 1
     assert result.agent_outputs["state_commit"][-1]["status"] == "committed"
     assert result.student_state.weak_skills == ["fractions"]
 
@@ -187,6 +189,27 @@ def test_live_state_baselines_commit_state_updates():
 
     assert result["state"]["agent_outputs"]["state_commit"][-1]["status"] == "committed"
     assert result["state"]["student_state"]["active_misconceptions"] == ["sign_error"]
+
+
+def test_exp3_ours_full_uses_state_commit_focused_runtime():
+    method = MethodSpec(
+        "ours_full",
+        "M3",
+        "Full PRISM-Tutor runtime",
+        ("risk_estimator", "qos_router", "budget_controller", "state_commit", "final_tutor"),
+    )
+    graph_config = _prism_graph_config_from_run_config(
+        {
+            "experiment": {"name": "exp3_state_commit"},
+            "thresholds": {},
+            "budget": {"max_rounds": 3, "max_tokens_per_case": 4000},
+            "risk_weights": {},
+        },
+        method,
+    )
+
+    assert graph_config.variant["state_commit_focus"] is True
+    assert "budget_controller" in graph_config.disabled_modules
 
 
 def test_prism_graph_can_disable_state_commit_for_ablation():
