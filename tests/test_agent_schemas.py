@@ -185,7 +185,15 @@ def test_verifier_issue_normalizes_common_recommended_agent_aliases():
             "issue_type": "pedagogy",
             "severity": "medium",
             "message": "Needs a corrective teaching move.",
-            "recommended_agent": "corrective",
+            "recommended_agent": "corrector",
+        }
+    )
+    formatter = VerifierIssue.model_validate(
+        {
+            "issue_type": "format",
+            "severity": "low",
+            "message": "Needs formatting cleanup.",
+            "recommended_agent": "formatter",
         }
     )
     verifier = VerifierIssue.model_validate(
@@ -198,6 +206,7 @@ def test_verifier_issue_normalizes_common_recommended_agent_aliases():
     )
 
     assert corrective.recommended_agent == "pedagogy"
+    assert formatter.recommended_agent == "final_tutor"
     assert verifier.recommended_agent is None
 
 

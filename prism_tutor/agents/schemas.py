@@ -80,11 +80,16 @@ class VerifierIssue(StrictModel):
         normalized = str(value).strip().lower().replace("-", "_").replace(" ", "_")
         aliases = {
             "corrective": "pedagogy",
+            "corrector": "pedagogy",
+            "correction": "pedagogy",
             "conceptual": "pedagogy",
             "scaffold": "pedagogy",
             "scaffolding": "pedagogy",
             "socratic": "pedagogy",
             "worked_example": "pedagogy",
+            "format": "final_tutor",
+            "formatter": "final_tutor",
+            "formatting": "final_tutor",
             "tutor": "hint",
             "critic": None,
             "verifier": None,
