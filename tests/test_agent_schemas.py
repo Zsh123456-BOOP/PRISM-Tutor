@@ -201,13 +201,22 @@ def test_verifier_issue_normalizes_common_recommended_agent_aliases():
             "issue_type": "other",
             "severity": "low",
             "message": "Needs another verification pass.",
+            "recommended_agent": "leakage",
+        }
+    )
+    redundant_verifier = VerifierIssue.model_validate(
+        {
+            "issue_type": "other",
+            "severity": "low",
+            "message": "Needs another verification pass.",
             "recommended_agent": "verifier",
         }
     )
 
     assert corrective.recommended_agent == "pedagogy"
     assert formatter.recommended_agent == "final_tutor"
-    assert verifier.recommended_agent is None
+    assert verifier.recommended_agent == "hint"
+    assert redundant_verifier.recommended_agent is None
 
 
 def test_final_tutor_requires_response():

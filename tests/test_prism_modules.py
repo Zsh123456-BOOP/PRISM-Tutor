@@ -1,4 +1,7 @@
 from prism_tutor.agents.base_client import BaseLLMClient, LLMClientConfig
+from prism_tutor.agents.parser import parse_agent_json
+from prism_tutor.agents.schemas import AGENT_SCHEMAS
+from prism_tutor.agents.types import LLMCallRecord, LLMUsage
 from prism_tutor.experiments.method_registry import MethodSpec
 from prism_tutor.experiments.runner import _prism_graph_config_from_run_config, _run_live_baseline
 from prism_tutor.runtime.graph_state import TutorGraphState
@@ -156,6 +159,57 @@ def test_prism_graph_m3_runs_state_manager_before_final_tutor():
     assert sum(call["agent_name"] == "final_tutor" for call in result.llm_calls) == 1
     assert result.agent_outputs["state_commit"][-1]["status"] == "committed"
     assert result.student_state.weak_skills == ["fractions"]
+
+
+class _LeakageRetryClient:
+    def __init__(self) -> None:
+        self.final_calls = 0
+
+    def call(self, *, sample_id, method, agent_name, messages, schema):
+        if agent_name == "final_tutor":
+            self.final_calls += 1
+            if self.final_calls == 1:
+                raw = '{"response":"The answer is 42.","withheld_answer":false,"confidence":0.8,"safety_notes":[]}'
+            else:
+                raw = '{"response":"Try checking the relationship in the problem first.","withheld_answer":true,"confidence":0.8,"safety_notes":["regenerated"]}'
+        else:
+            raw = BaseLLMClient(
+                LLMClientConfig(mock_mode=True)
+            )._mock_completion(agent_name, AGENT_SCHEMAS.get(agent_name))
+        parsed = parse_agent_json(raw, schema)
+        return LLMCallRecord(
+            sample_id=sample_id,
+            method=method,
+            agent_name=agent_name,
+            endpoint="mock://leakage-retry",
+            prompt=messages,
+            raw_completion=raw,
+            stripped_output=parsed.stripped_output,
+            parsed_output=parsed.parsed_output,
+            usage=LLMUsage(prompt_tokens=1, completion_tokens=1, total_tokens=2, source="mock"),
+            parse_success=parsed.parse_success,
+        )
+
+
+def test_prism_graph_regenerates_leaky_final_response_once():
+    client = _LeakageRetryClient()
+    graph = build_prism_graph("M3", client=client)
+
+    result = graph.invoke(
+        {
+            "sample": {
+                "sample_id": "s1",
+                "problem": "What is 40+2?",
+                "metadata": {"ground_truth": "42"},
+            },
+            "method": "M3",
+        }
+    )
+
+    final_calls = [call for call in result.llm_calls if call["agent_name"] == "final_tutor"]
+    assert len(final_calls) == 2
+    assert result.agent_outputs["leakage_guard"]
+    assert final_calls[-1]["parsed_output"]["response"] == "Try checking the relationship in the problem first."
 
 
 def test_live_state_baselines_commit_state_updates():

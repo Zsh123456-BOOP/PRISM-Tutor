@@ -25,6 +25,16 @@ def test_repair_single_quotes_and_trailing_comma():
     assert "trailing_commas_removed" in result.warnings
 
 
+def test_repair_raw_newline_inside_json_string():
+    raw = '{"response":"Try the first part\nbefore simplifying.","withheld_answer":true,"confidence":0.8,"safety_notes":[]}'
+
+    result = parse_agent_json(raw, FinalTutorOutput)
+
+    assert result.parse_success is True
+    assert result.parsed_output["response"] == "Try the first part\nbefore simplifying."
+    assert "control_chars_escaped" in result.warnings
+
+
 def test_repair_failure_is_not_silent_empty_json():
     result = parse_agent_json("not json", HintOutput)
     assert result.parse_success is False

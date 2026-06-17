@@ -81,6 +81,54 @@ def _canonicalize_with_json_or_literal(text: str) -> str:
     return json.dumps(parsed, ensure_ascii=False)
 
 
+def escape_control_chars_in_strings(text: str) -> tuple[str, list[str]]:
+    output: list[str] = []
+    warnings: list[str] = []
+    in_string = False
+    escape = False
+    quote = ""
+    changed = False
+    for char in text:
+        if in_string:
+            if escape:
+                output.append(char)
+                escape = False
+                continue
+            if char == "\\":
+                output.append(char)
+                escape = True
+                continue
+            if char == quote:
+                output.append(char)
+                in_string = False
+                continue
+            if char == "\n":
+                output.append("\\n")
+                changed = True
+                continue
+            if char == "\r":
+                output.append("\\r")
+                changed = True
+                continue
+            if char == "\t":
+                output.append("\\t")
+                changed = True
+                continue
+            if ord(char) < 0x20:
+                output.append("\\u%04x" % ord(char))
+                changed = True
+                continue
+            output.append(char)
+            continue
+        output.append(char)
+        if char in {"\"", "'"}:
+            in_string = True
+            quote = char
+    if changed:
+        warnings.append("control_chars_escaped")
+    return "".join(output), warnings
+
+
 def repair_json_text(text: str) -> RepairResult:
     warnings: list[str] = []
     candidate, fence_warnings = strip_markdown_fence(text)
@@ -97,10 +145,12 @@ def repair_json_text(text: str) -> RepairResult:
     no_trailing_commas = TRAILING_COMMA_RE.sub(r"\1", normalized)
     if no_trailing_commas != candidate:
         warnings.append("trailing_commas_removed")
+    escaped_control_chars, control_warnings = escape_control_chars_in_strings(no_trailing_commas)
+    warnings.extend(control_warnings)
 
     try:
-        canonical = _canonicalize_with_json_or_literal(no_trailing_commas)
+        canonical = _canonicalize_with_json_or_literal(escaped_control_chars)
     except Exception:
-        return RepairResult(text=no_trailing_commas, repaired=bool(warnings), warnings=warnings)
+        return RepairResult(text=escaped_control_chars, repaired=bool(warnings), warnings=warnings)
 
     return RepairResult(text=canonical, repaired=canonical != text.strip(), warnings=warnings)

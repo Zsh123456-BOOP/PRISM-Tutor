@@ -163,6 +163,7 @@ def test_state_metrics_read_live_state_commit_output():
                                     "operation": "add",
                                     "value": "fractions",
                                     "confidence": 0.9,
+                                    "evidence": "student confused denominator",
                                 }
                             ],
                             "tentative_updates": [],
@@ -180,6 +181,8 @@ def test_state_metrics_read_live_state_commit_output():
     assert row["state_metric_coverage"] == 1.0
     assert row["state_conflict_rate"] == 0.0
     assert row["tentative_update_rate"] == 0.0
+    assert row["unsafe_commit_rate"] == 0.0
+    assert row["commit_with_evidence_rate"] == 1.0
 
 
 def test_parse_failed_records_are_kept_but_structured_metrics_are_missing():

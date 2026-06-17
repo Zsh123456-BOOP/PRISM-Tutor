@@ -47,16 +47,32 @@ def evaluate_state_metrics(record: dict[str, Any]) -> dict[str, Any]:
             "state_conflict_rate": None,
             "incorrect_commit_rate": None,
             "tentative_update_rate": None,
+            "unsafe_commit_rate": None,
+            "tentative_when_conflict_rate": None,
+            "commit_with_evidence_rate": None,
             "state_metric_coverage": 0.0,
         }
     conflicts = sum(bool(event.get("conflict") or event.get("type") == "conflict") for event in events)
     commits = [event for event in events if event.get("type") in {"commit", "state_commit"} or "correct" in event]
     incorrect = sum(event.get("correct") is False or event.get("incorrect") is True for event in commits)
     tentative = sum(event.get("tentative") is True or event.get("type") == "tentative_update" for event in events)
+    unsafe_commits = sum(
+        bool(event.get("conflict")) and event.get("type") in {"commit", "state_commit"}
+        for event in events
+    )
+    conflict_events = [event for event in events if bool(event.get("conflict") or event.get("type") == "conflict")]
+    tentative_conflicts = sum(
+        event.get("tentative") is True or event.get("type") == "tentative_update"
+        for event in conflict_events
+    )
+    evidence_commits = sum(bool(event.get("evidence")) for event in commits)
     return {
         "state_event_count": len(events),
         "state_conflict_rate": conflicts / len(events),
         "incorrect_commit_rate": incorrect / len(commits) if commits else None,
         "tentative_update_rate": tentative / len(events),
+        "unsafe_commit_rate": unsafe_commits / len(commits) if commits else None,
+        "tentative_when_conflict_rate": tentative_conflicts / len(conflict_events) if conflict_events else None,
+        "commit_with_evidence_rate": evidence_commits / len(commits) if commits else None,
         "state_metric_coverage": 1.0,
     }

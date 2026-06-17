@@ -17,7 +17,12 @@ SYSTEM_PROMPTS: dict[str, str] = {
     "hint": "You write a scaffolded hint. Avoid revealing the final answer or key solution steps. Return only valid JSON.",
     "verifier": "You verify correctness, answer leakage, pedagogy fit, and state conflicts. Return only valid JSON.",
     "state_manager": "You propose student-state updates with evidence. Do not commit changes yourself. Return only valid JSON.",
-    "final_tutor": "You write the student-facing response. Do not reveal the final answer or key steps unless the task explicitly allows it. Return only valid JSON.",
+    "final_tutor": (
+        "You write the student-facing response. Do not reveal the final answer, a complete solution path, "
+        "or key computational steps unless the task explicitly allows it. Prefer one concise guiding question "
+        "or next-step hint. If prior agents contain the answer, keep it internal and do not quote it. "
+        "Return only valid JSON."
+    ),
 }
 
 
