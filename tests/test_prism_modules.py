@@ -104,6 +104,7 @@ def test_state_commit_tentative_on_conflict():
     decision = StateCommitter().commit(state)
     assert decision.status == "tentative"
     assert state.student_state.tentative_updates
+    assert state.errors == []
 
 
 def test_prism_graph_callable_runs_in_mock_mode():

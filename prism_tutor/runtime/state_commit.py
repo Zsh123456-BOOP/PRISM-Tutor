@@ -7,7 +7,6 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .errors import GraphErrorRecord
 from .graph_state import StudentState, TutorGraphState
 
 
@@ -76,7 +75,6 @@ class StateCommitter:
         latest = (state.agent_outputs.get("state_manager") or [{}])[-1]
         updates = [deepcopy(update) for update in latest.get("proposed_updates", [])]
         state.student_state.tentative_updates.extend(updates)
-        state.errors.append(GraphErrorRecord(code="state_conflict", message=reason, recoverable=True))
         return CommitDecision(status="tentative", tentative_updates=updates)
 
     @staticmethod
