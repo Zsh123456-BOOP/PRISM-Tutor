@@ -59,6 +59,7 @@ budget:
   max_rounds: 3
   max_agents: 5
   max_tokens_per_case: 4000
+  full_system_max_tokens_per_case: 12000
 
 cuda:
   expected_gpu_count: 2
