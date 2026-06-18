@@ -111,6 +111,67 @@ def test_auto_metrics_use_unified_schema_gold_fields():
     assert row["routing_recall"] > 0
 
 
+def test_misconception_constrained_classification_uses_candidate_space():
+    candidates = [
+        "students confuse numerator and denominator",
+        "students misunderstand proportional relationships",
+    ]
+    generations = [
+        {
+            "sample_id": "m1",
+            "dataset": "misconception",
+            "split": "test",
+            "method": "ours_full",
+            "token_usage": {"total_tokens": 10, "source": "api"},
+            "parse_success": True,
+            "final_response": "Re-check the parts of the fraction.",
+            "state": {
+                "agent_outputs": {
+                    # lightly reworded free-text prediction -> canonicalized to candidate[0]
+                    "misconception": [{"misconception_labels": ["the student confuses numerator and denominator"]}]
+                }
+            },
+        }
+    ]
+    gold = [
+        {
+            "sample_id": "m1",
+            "dataset": "misconception",
+            "misconception_label": "students confuse numerator and denominator",
+            "candidate_misconceptions": candidates,
+        }
+    ]
+
+    row = compute_auto_metrics(generations, gold)["record_metrics"][0]
+    assert row["misconception_coverage"] == 1.0
+    assert row["misconception_f1"] == 1.0
+
+
+def test_misconception_unrelated_prediction_scores_zero_in_candidate_space():
+    candidates = ["students confuse numerator and denominator"]
+    generations = [
+        {
+            "sample_id": "m2",
+            "dataset": "misconception",
+            "split": "test",
+            "method": "ours_full",
+            "parse_success": True,
+            "final_response": "Think again.",
+            "state": {"agent_outputs": {"misconception": [{"misconception_labels": ["sign error when subtracting"]}]}},
+        }
+    ]
+    gold = [
+        {
+            "sample_id": "m2",
+            "dataset": "misconception",
+            "misconception_label": "students confuse numerator and denominator",
+            "candidate_misconceptions": candidates,
+        }
+    ]
+    row = compute_auto_metrics(generations, gold)["record_metrics"][0]
+    assert row["misconception_f1"] == 0.0
+
+
 def test_auto_metrics_read_live_generation_accounting_fields():
     generations = [
         {

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from prism_tutor.utils.answers import canonicalize_label
+
 
 def _events(record: dict[str, Any]) -> list[dict[str, Any]]:
     state = record.get("state") if isinstance(record.get("state"), dict) else {}
@@ -73,6 +75,20 @@ def _as_set(value: Any) -> set[str]:
     return {str(value).strip().lower()}
 
 
+_MISCONCEPTION_FIELDS = {"active_misconceptions"}
+
+
+def _canonical_pred_set(field: str, value: Any, candidates: list[str]) -> set[str]:
+    """Set view of a predicted field, mapping misconception labels onto the
+    closed candidate label space when one is available (so a committed free-text
+    label still aligns with the canonical gold label)."""
+    if field in _MISCONCEPTION_FIELDS and candidates:
+        raw = value if isinstance(value, (list, tuple, set)) else [value]
+        mapped = {canonicalize_label(item, candidates) for item in raw}
+        return {str(item).strip().lower() for item in mapped if item}
+    return _as_set(value)
+
+
 def _external_state_metrics(record: dict[str, Any], gold: dict[str, Any] | None) -> dict[str, Any]:
     target = _gold_state(gold)
     if not target:
@@ -83,19 +99,21 @@ def _external_state_metrics(record: dict[str, Any], gold: dict[str, Any] | None)
             "final_state_contradiction": None,
             "noisy_state_update_rejection_accuracy": None,
         }
+    candidates = gold.get("candidate_misconceptions") if isinstance(gold, dict) else None
+    candidates = candidates if isinstance(candidates, list) else []
     final_state = _final_student_state(record)
     scored: list[bool] = []
     contradiction = False
     for field, gold_value in target.items():
         gold_set = _as_set(gold_value)
-        pred_set = _as_set(final_state.get(field))
+        pred_set = _canonical_pred_set(field, final_state.get(field), candidates)
         if not gold_set:
             continue
         scored.append(bool(pred_set & gold_set))
         if pred_set and pred_set.isdisjoint(gold_set):
             contradiction = True
     active_gold = _as_set(target.get("active_misconceptions"))
-    active_pred = _as_set(final_state.get("active_misconceptions"))
+    active_pred = _canonical_pred_set("active_misconceptions", final_state.get("active_misconceptions"), candidates)
     incorrect_rate = None
     if active_pred and active_gold:
         incorrect_rate = len(active_pred - active_gold) / len(active_pred)

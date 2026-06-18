@@ -52,11 +52,30 @@ def test_risk_estimator_uses_visible_student_signals_for_routing():
     risk = estimate_risk(state)
     selected = QoSRouter().select_agents(risk)
 
+    # A short, confused turn escalates misconception + pedagogy, but the easy
+    # problem keeps answer uncertainty low so the solver is NOT routed -- this is
+    # the adaptive behavior the recalibrated risk estimator is meant to produce
+    # (the old estimator forced every math sample to "high", routing everything).
     assert risk.misconception_risk >= 0.6
     assert risk.pedagogy_risk >= 0.6
-    assert risk.answer_uncertainty >= 0.7
-    assert {"solver", "misconception", "pedagogy", "verifier", "final_tutor"}.issubset(set(selected))
+    assert risk.answer_uncertainty < 0.7
+    assert {"misconception", "pedagogy", "verifier", "final_tutor"}.issubset(set(selected))
+    assert "solver" not in selected
     assert "hint" not in selected
+
+    # A long / hard problem raises estimated difficulty -> answer uncertainty,
+    # which routes the solver. Routing therefore varies with the visible signal.
+    hard = TutorGraphState(
+        sample={
+            "sample_id": "hard-1",
+            "problem_text": "Compute the result of the following multi-step word problem. " * 12,
+            "student_utterance": "I am not sure how to start.",
+        },
+        method="M1",
+    )
+    hard_risk = estimate_risk(hard)
+    assert hard_risk.answer_uncertainty >= 0.7
+    assert "solver" in QoSRouter().select_agents(hard_risk)
 
 
 def test_model_input_strips_gold_fields_from_agent_prompt():
@@ -111,7 +130,9 @@ def test_prism_graph_routes_dynamically_from_sample_schema():
     )
 
     assert result.risk_scores
-    assert {"solver", "pedagogy", "verifier", "final_tutor"}.issubset(set(result.selected_agents))
+    # Confused short turn -> medium bucket: misconception + pedagogy routed, but
+    # not the solver (low answer uncertainty) and not the hint agent.
+    assert {"misconception", "pedagogy", "verifier", "final_tutor"}.issubset(set(result.selected_agents))
     assert "hint" not in result.selected_agents
 
 
@@ -302,7 +323,9 @@ def test_prism_graph_budget_loop_prunes_repeated_agent_calls():
     assert call_counts["pedagogy"] == 1
     assert call_counts["misconception"] == 1
     assert call_counts["state_manager"] == 1
-    assert call_counts["verifier"] == 1
+    # Work agents are pruned to a single call; the verifier is intentionally
+    # re-run after each deliberation round, so it may be called more than once.
+    assert call_counts["verifier"] >= 1
     assert call_counts["final_tutor"] == 1
 
 
@@ -401,6 +424,24 @@ def test_prism_graph_can_bypass_qos_router_for_ablation():
     result = graph.invoke({"sample": {"sample_id": "s1", "difficulty": "easy"}, "method": "M1"})
 
     assert "state_manager" in result.selected_agents
+
+
+def test_budget_rounds_are_risk_conditioned():
+    from prism_tutor.runtime.budget_controller import BudgetConfig, BudgetController
+
+    controller = BudgetController(BudgetConfig())
+    low = TutorGraphState(sample={"sample_id": "l"}, method="M2")
+    low.risk_scores.append({"risk_bucket": "low"})
+    high = TutorGraphState(sample={"sample_id": "h"}, method="M2")
+    high.risk_scores.append({"risk_bucket": "high"})
+
+    assert controller._effective_max_rounds(low) == 1
+    assert controller._effective_max_rounds(high) == 3
+
+    low.rounds = 1
+    assert controller.should_continue(low) is False  # low-risk stops after one round
+    high.rounds = 1
+    assert controller.should_continue(high) is True  # high-risk keeps deliberating
 
 
 def test_prism_graph_injects_noisy_agent_outputs_deterministically():

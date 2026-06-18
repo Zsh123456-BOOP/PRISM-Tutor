@@ -26,6 +26,7 @@ SCHEMA_FIELDS = [
     "remediation_strategy",
     "teacher_intention",
     "misconception_label",
+    "candidate_misconceptions",
     "sample_index",
     "source_file",
     "metadata",
@@ -55,7 +56,7 @@ TASK_FIELDS = {
     ],
 }
 
-LIST_FIELDS = {"scaffolding"}
+LIST_FIELDS = {"scaffolding", "candidate_misconceptions"}
 
 
 def stable_hash(value: Any, length: int = 16) -> str:

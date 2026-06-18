@@ -39,12 +39,19 @@ def build_agent_messages(
     error_summary: str | None = None,
 ) -> list[dict[str, str]]:
     schema = AGENT_SCHEMAS[agent_name]
+    model_input = build_model_input(sample)
     system = (
         f"{SYSTEM_PROMPTS[agent_name]}\n"
         "You must satisfy this JSON schema exactly:\n"
         f"{schema_text(schema)}"
     )
-    payload = {"sample": build_model_input(sample), "runtime_state": state or {}}
+    if agent_name == "misconception" and model_input.get("candidate_misconceptions"):
+        system += (
+            "\nClassification constraint: populate misconception_labels ONLY with labels copied "
+            "verbatim from sample.candidate_misconceptions (the fixed benchmark taxonomy). "
+            "Return an empty list if none apply. Do not invent new label text."
+        )
+    payload = {"sample": model_input, "runtime_state": state or {}}
     if error_summary:
         payload["previous_error"] = error_summary
         payload["retry_instruction"] = "Repair the output. Return one JSON object only."

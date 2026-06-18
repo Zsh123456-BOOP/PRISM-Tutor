@@ -7,6 +7,8 @@ from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import Any
 
+from prism_tutor.utils.answers import extract_final_numeric
+
 from .io import read_raw_records
 from .schema import first_present, make_record, stable_hash
 
@@ -92,6 +94,13 @@ def load_mathdial(raw_path: str | Path) -> list[dict[str, Any]]:
                 value = first_present(sample, (key,))
                 if value not in (None, ""):
                     metadata[key] = value
+            # MathDial gold is a full worked-solution narrative; cache the final
+            # numeric answer separately so closed-form correctness does not match
+            # the solver answer against the entire solution text (eval-only gold).
+            if metadata.get("ground_truth"):
+                final_answer = extract_final_numeric(metadata["ground_truth"])
+                if final_answer is not None:
+                    metadata["final_answer"] = final_answer
             records.append(
                 make_record(
                     dataset="mathdial",
@@ -229,6 +238,15 @@ def load_misconception(raw_path: str | Path) -> list[dict[str, Any]]:
                 metadata=metadata,
             )
         )
+    # Attach the closed candidate label set so the misconception agent can be
+    # constrained to classify into the benchmark taxonomy instead of emitting
+    # free text. This is the label SPACE (model-visible), not the per-sample gold
+    # label (which stays in misconception_label and is stripped from model input).
+    candidate_misconceptions = sorted(
+        {record["misconception_label"] for record in records if record.get("misconception_label")}
+    )
+    for record in records:
+        record["candidate_misconceptions"] = candidate_misconceptions
     return records
 
 

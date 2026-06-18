@@ -31,12 +31,14 @@ MODEL_INPUT_FIELDS = {
     "student_profile",
     "past_student_profile",
     "difficulty",
+    "candidate_misconceptions",
 }
 
 GOLD_FIELDS = {
     "answer",
     "correct_answer",
     "final_answer",
+    "final_numeric_answer",
     "gold_answer",
     "gold_context",
     "gold_label",

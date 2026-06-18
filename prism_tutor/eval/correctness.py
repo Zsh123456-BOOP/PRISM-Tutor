@@ -6,6 +6,8 @@ import re
 import unicodedata
 from typing import Any
 
+from prism_tutor.utils.answers import answers_match
+
 
 def normalize_answer(value: Any) -> str:
     text = unicodedata.normalize("NFKC", "" if value is None else str(value))
@@ -42,30 +44,42 @@ def _latest_solver_answer(record: dict[str, Any]) -> Any:
     return None
 
 
+def _missing_correctness(reason: str) -> dict[str, Any]:
+    return {
+        "solver_correctness": None,
+        "solver_correctness_numerator": 0,
+        "solver_correctness_denominator": 0,
+        "solver_correctness_coverage": 0.0,
+        "solver_correctness_reason": reason,
+        "internal_correctness": None,
+        "internal_correctness_numerator": 0,
+        "internal_correctness_denominator": 0,
+        "internal_correctness_coverage": 0.0,
+        "internal_correctness_reason": "solver_correctness_alias",
+    }
+
+
 def evaluate_solver_correctness(record: dict[str, Any], gold: dict[str, Any]) -> dict[str, Any]:
     candidate = _latest_solver_answer(record)
     metadata = gold.get("metadata") if isinstance(gold.get("metadata"), dict) else {}
+    # Prefer the extracted final answer; fall back to the full ground-truth
+    # narrative (answers_match extracts the final number from either side).
     gold_answer = (
         gold.get("answer")
-        or gold.get("ground_truth")
         or gold.get("final_answer")
-        or metadata.get("ground_truth")
+        or gold.get("final_numeric_answer")
+        or metadata.get("final_answer")
         or metadata.get("correct_answer")
+        or gold.get("ground_truth")
+        or metadata.get("ground_truth")
     )
-    match = exact_or_normalized_match(candidate, gold_answer)
+    if gold_answer in (None, ""):
+        return _missing_correctness("missing_gold")
+    if candidate in (None, ""):
+        return _missing_correctness("missing_solver_answer")
+    match = answers_match(candidate, gold_answer)
     if match is None:
-        return {
-            "solver_correctness": None,
-            "solver_correctness_numerator": 0,
-            "solver_correctness_denominator": 0,
-            "solver_correctness_coverage": 0.0,
-            "solver_correctness_reason": "missing_gold" if gold_answer in (None, "") else "missing_solver_answer",
-            "internal_correctness": None,
-            "internal_correctness_numerator": 0,
-            "internal_correctness_denominator": 0,
-            "internal_correctness_coverage": 0.0,
-            "internal_correctness_reason": "solver_correctness_alias",
-        }
+        return _missing_correctness("uncomparable_answer")
     return {
         "solver_correctness": float(match),
         "solver_correctness_numerator": int(match),

@@ -34,3 +34,9 @@ checkpoints/
 .DS_Store
 .vscode/
 *.swp
+
+# Reference PDFs (downloaded locally; tracked summary lives in references/README.md)
+references/*.pdf
+
+# Remote artifact snapshots synced for review (kept local, not tracked)
+remote_artifacts/

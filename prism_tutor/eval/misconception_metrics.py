@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from prism_tutor.utils.answers import canonicalize_label
+
 
 def _as_set(value: Any) -> set[str]:
     if value is None:
@@ -71,5 +73,13 @@ def evaluate_misconceptions(record: dict[str, Any], gold: dict[str, Any]) -> dic
         or gold.get("misconception_labels")
         or gold.get("misconception_label")
     )
+    # Constrained-classification scoring: when the benchmark ships a fixed
+    # candidate label space, map each free-text prediction onto its canonical
+    # candidate before computing F1. Without a candidate set we fall back to the
+    # raw set-overlap behavior so other datasets/tests are unaffected.
+    candidates = gold.get("candidate_misconceptions")
+    if isinstance(candidates, list) and candidates:
+        mapped = {canonicalize_label(label, candidates) for label in _as_set(predicted)}
+        predicted = {label for label in mapped if label}
     result = precision_recall_f1(predicted, expected)
     return {f"misconception_{key}": value for key, value in result.items()}

@@ -209,16 +209,20 @@ def _prism_graph_config_from_run_config(config: dict[str, Any], method: MethodSp
         token_budget = max(token_budget, int(budget.get("full_system_max_tokens_per_case", 20000)))
     risk_config = RiskConfig(
         weights=weights,
-        low_threshold=float(thresholds.get("medium_risk", thresholds.get("low_risk", 0.33))),
-        high_threshold=float(thresholds.get("high_risk", 0.66)),
+        low_threshold=float(thresholds.get("low_risk", 0.33)),
+        high_threshold=float(thresholds.get("high_risk", 0.60)),
     )
+    budget_config = BudgetConfig(
+        max_rounds=int(budget.get("max_rounds", 2)),
+        max_tokens=token_budget,
+        verify_after_new_agents=base_method != "ours_full",
+    )
+    rounds_by_bucket = budget.get("rounds_by_bucket")
+    if isinstance(rounds_by_bucket, dict):
+        budget_config.rounds_by_bucket = {str(key): int(value) for key, value in rounds_by_bucket.items()}
     graph_config = PrismGraphConfig(
         risk=risk_config,
-        budget=BudgetConfig(
-            max_rounds=int(budget.get("max_rounds", 2)),
-            max_tokens=token_budget,
-            verify_after_new_agents=base_method != "ours_full",
-        ),
+        budget=budget_config,
         commit=CommitConfig(
             commit_confidence_threshold=float(thresholds.get("misconception_confidence_commit", 0.7)),
             tentative_confidence_threshold=float(thresholds.get("state_conflict_block_threshold", 0.4)),

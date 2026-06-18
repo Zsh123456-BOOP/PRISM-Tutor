@@ -46,11 +46,16 @@ risk_weights:
   answer_uncertainty: 0.20
   leakage_risk: 0.15
   state_conflict_risk: 0.10
+  estimated_difficulty: 0.20
 
+# Bucket boundaries on total_risk. Calibrated (on dev/built text, not test) so the
+# recalibrated risk estimator produces a non-degenerate low/medium/high split
+# instead of routing every sample to "high" (the old over-trigger). low_risk is
+# the low/medium boundary; high_risk is the medium/high boundary.
 thresholds:
-  low_risk: 0.25
-  medium_risk: 0.55
-  high_risk: 0.75
+  low_risk: 0.38
+  medium_risk: 0.46
+  high_risk: 0.55
   misconception_confidence_commit: 0.70
   leakage_block_threshold: 0.50
   state_conflict_block_threshold: 0.40
@@ -60,6 +65,12 @@ budget:
   max_agents: 5
   max_tokens_per_case: 4000
   full_system_max_tokens_per_case: 20000
+  # Risk-conditioned deliberation budget: low-risk cases stop after one round so
+  # M2/M3 spend fewer rounds/tokens than fixed-round baselines on easy cases.
+  rounds_by_bucket:
+    low: 1
+    medium: 2
+    high: 3
 
 cuda:
   expected_gpu_count: 2

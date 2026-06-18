@@ -11,6 +11,7 @@ class BudgetConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     max_rounds: int = Field(default=2, ge=1)
+    rounds_by_bucket: dict[str, int] = Field(default_factory=lambda: {"low": 1, "medium": 2, "high": 3})
     max_tokens: int = Field(default=20000, ge=1)
     max_agent_repeats: int = Field(default=1, ge=1)
     verify_after_new_agents: bool = True
@@ -20,8 +21,18 @@ class BudgetController:
     def __init__(self, config: BudgetConfig | None = None) -> None:
         self.config = config or BudgetConfig()
 
+    def _effective_max_rounds(self, state: TutorGraphState) -> int:
+        """Risk-conditioned deliberation budget: low-risk cases stop early, only
+        high-risk cases use the full round budget. This is what makes M2/M3 spend
+        fewer rounds/tokens than fixed-round baselines on easy cases."""
+        bucket = None
+        scores = getattr(state, "risk_scores", None)
+        if isinstance(scores, list) and scores and isinstance(scores[-1], dict):
+            bucket = scores[-1].get("risk_bucket")
+        return self.config.rounds_by_bucket.get(bucket, self.config.max_rounds)
+
     def should_continue(self, state: TutorGraphState) -> bool:
-        if state.rounds >= self.config.max_rounds:
+        if state.rounds >= self._effective_max_rounds(state):
             state.termination_reason = "max_rounds"
             return False
         if state.total_tokens >= self.config.max_tokens:

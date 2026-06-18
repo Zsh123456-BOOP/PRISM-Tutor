@@ -82,10 +82,12 @@ def test_prism_graph_config_uses_default_yaml_and_ablation_variant() -> None:
     config = _prism_graph_config_from_run_config(load_config(), method)
 
     assert config.risk.weights["misconception_risk"] == 0.30
-    assert config.risk.low_threshold == 0.55
-    assert config.risk.high_threshold == 0.75
+    assert config.risk.weights["estimated_difficulty"] == 0.20
+    assert config.risk.low_threshold == 0.38
+    assert config.risk.high_threshold == 0.55
     assert config.budget.max_rounds == 3
     assert config.budget.max_tokens == 4000
+    assert config.budget.rounds_by_bucket == {"low": 1, "medium": 2, "high": 3}
     assert config.disabled_risks == ["leakage_risk"]
 
 

@@ -25,7 +25,7 @@ class RiskConfig(BaseModel):
         }
     )
     low_threshold: float = Field(default=0.33, ge=0, le=1)
-    high_threshold: float = Field(default=0.66, ge=0, le=1)
+    high_threshold: float = Field(default=0.60, ge=0, le=1)
 
 
 def _latest(state: TutorGraphState, agent_name: str) -> dict[str, Any]:
@@ -39,7 +39,10 @@ def _difficulty_from_sample(sample: dict[str, Any]) -> float:
         return max(0.0, min(1.0, float(raw)))
     if isinstance(raw, str):
         return {"easy": 0.2, "low": 0.2, "medium": 0.5, "hard": 0.8, "high": 0.8}.get(raw.lower(), 0.5)
-    problem_text = " ".join(str(sample.get(key, "")) for key in ("question", "problem", "student_utterance"))
+    problem_text = " ".join(
+        str(sample.get(key, ""))
+        for key in ("question", "problem", "problem_text", "context", "student_utterance", "student_solution")
+    )
     return max(0.2, min(0.8, len(problem_text) / 800))
 
 
@@ -109,8 +112,9 @@ def _sample_signals(sample: dict[str, Any]) -> dict[str, bool]:
     dialogue_like = _has_any(sample, ("dialogue", "dialogue_text", "dialogue_history", "dialogue_turns"))
     return {
         "needs_solver": math_like,
-        "needs_misconception": confusion_like or (has_student_work and math_like),
-        "needs_pedagogy": has_student_work or dialogue_like,
+        "confusion": confusion_like,
+        "has_student_work": has_student_work,
+        "dialogue_like": dialogue_like,
         "known_leakage": False,
     }
 
@@ -123,27 +127,40 @@ def estimate_risk(state: TutorGraphState, config: RiskConfig | None = None) -> R
     verifier = _latest(state, "verifier")
 
     signals = _sample_signals(state.sample)
+    difficulty = _difficulty_from_sample(state.sample)
+    solver_ran = bool(solver)
 
-    answer_uncertainty = float(solver.get("uncertainty", 1 - float(solver.get("confidence", 0.55))))
-    if signals["needs_solver"]:
-        answer_uncertainty = max(answer_uncertainty, 0.72)
+    # Answer uncertainty: once the solver has run, trust its own (un)certainty;
+    # before execution, grade by problem difficulty rather than forcing a near-
+    # universal high floor (the old `needs_solver -> 0.72` collapsed every math
+    # sample into "high risk", which removed all routing/budget adaptivity).
+    if solver_ran:
+        answer_uncertainty = float(solver.get("uncertainty", 1 - float(solver.get("confidence", 0.6))))
     else:
-        answer_uncertainty = min(answer_uncertainty, 0.45)
+        answer_uncertainty = 0.32 + 0.6 * difficulty
+    if not signals["needs_solver"]:
+        answer_uncertainty = min(answer_uncertainty, 0.4)
 
-    severity = {"low": 0.2, "medium": 0.55, "high": 0.9}.get(str(misconception.get("severity", "medium")), 0.5)
-    misconception_risk = severity * float(misconception.get("confidence", 0.5))
+    # Misconception risk: graded by difficulty, escalated only on an explicit
+    # confusion signal or a detected misconception (no blanket high floor).
+    if solver_ran or misconception:
+        severity = {"low": 0.2, "medium": 0.55, "high": 0.9}.get(str(misconception.get("severity", "medium")), 0.5)
+        misconception_risk = severity * float(misconception.get("confidence", 0.0))
+    else:
+        misconception_risk = 0.2 + 0.3 * difficulty
     if misconception.get("misconception_detected") is True:
-        misconception_risk = max(misconception_risk, 0.6)
-    if signals["needs_misconception"]:
         misconception_risk = max(misconception_risk, 0.66)
+    if signals["confusion"]:
+        misconception_risk = max(misconception_risk, 0.62)
 
-    pedagogy_risk = 0.35
-    if signals["needs_pedagogy"]:
-        pedagogy_risk = max(pedagogy_risk, 0.62)
-    leakage_risk = float(hint.get("answer_leakage_risk", 0.2))
+    # Pedagogy risk: graded by difficulty; escalated for dialogue / confused turns.
+    pedagogy_risk = 0.3 + 0.3 * difficulty
+    if signals["dialogue_like"] or signals["confusion"]:
+        pedagogy_risk = max(pedagogy_risk, 0.6)
+    leakage_risk = float(hint.get("answer_leakage_risk", 0.15))
     if signals["known_leakage"]:
         leakage_risk = max(leakage_risk, 0.65)
-    state_conflict_risk = 0.2
+    state_conflict_risk = 0.15
     for issue in verifier.get("issues", []):
         issue_type = issue.get("issue_type")
         issue_severity = {"low": 0.3, "medium": 0.6, "high": 0.9}.get(issue.get("severity"), 0.5)
@@ -167,7 +184,7 @@ def estimate_risk(state: TutorGraphState, config: RiskConfig | None = None) -> R
         "pedagogy_risk": max(0.0, min(1.0, pedagogy_risk)),
         "leakage_risk": max(0.0, min(1.0, leakage_risk)),
         "state_conflict_risk": max(0.0, min(1.0, state_conflict_risk)),
-        "estimated_difficulty": _difficulty_from_sample(state.sample),
+        "estimated_difficulty": difficulty,
     }
     weight_sum = sum(max(0.0, cfg.weights.get(key, 0.0)) for key in values) or 1.0
     total = sum(values[key] * max(0.0, cfg.weights.get(key, 0.0)) for key in values) / weight_sum
