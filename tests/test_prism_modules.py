@@ -212,6 +212,63 @@ def test_prism_graph_regenerates_leaky_final_response_once():
     assert final_calls[-1]["parsed_output"]["response"] == "Try checking the relationship in the problem first."
 
 
+def test_prism_graph_budget_loop_prunes_repeated_agent_calls():
+    client = BaseLLMClient(
+        LLMClientConfig(
+            mock_responses={
+                "verifier": {
+                    "approved": False,
+                    "issues": [
+                        {
+                            "issue_type": "incorrect_answer",
+                            "severity": "medium",
+                            "message": "Needs a solver check.",
+                            "recommended_agent": "solver",
+                        },
+                        {
+                            "issue_type": "pedagogy",
+                            "severity": "low",
+                            "message": "Needs a pedagogy check.",
+                            "recommended_agent": "pedagogy",
+                        },
+                    ],
+                    "leakage_detected": False,
+                    "state_conflict_detected": False,
+                    "confidence": 0.7,
+                }
+            }
+        )
+    )
+    graph = build_prism_graph(
+        "M3",
+        client=client,
+        config=PrismGraphConfig(),
+    )
+
+    result = graph.invoke(
+        {
+            "sample": {
+                "sample_id": "mathdial-repeat",
+                "problem_text": "What is 12 + 3?",
+                "student_utterance": "I got 9.",
+                "metadata": {"ground_truth": "15"},
+            },
+            "method": "M3",
+        }
+    )
+
+    call_counts = {
+        agent: sum(call["agent_name"] == agent for call in result.llm_calls)
+        for agent in {"solver", "pedagogy", "misconception", "state_manager", "verifier", "final_tutor"}
+    }
+    assert call_counts["solver"] == 1
+    assert call_counts["pedagogy"] == 1
+    assert call_counts["misconception"] == 0
+    assert call_counts["state_manager"] == 1
+    assert call_counts["verifier"] > 1
+    assert call_counts["final_tutor"] == 1
+
+
 def test_live_state_baselines_commit_state_updates():
     client = BaseLLMClient(
         LLMClientConfig(

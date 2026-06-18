@@ -12,6 +12,7 @@ class BudgetConfig(BaseModel):
 
     max_rounds: int = Field(default=2, ge=1)
     max_tokens: int = Field(default=20000, ge=1)
+    max_agent_repeats: int = Field(default=1, ge=1)
 
 
 class BudgetController:
@@ -53,8 +54,20 @@ class BudgetController:
                 selected.append("state_manager")
         if selected:
             selected.append("verifier")
+        selected = self._prune_repeated_agents(state, selected)
         return list(dict.fromkeys(selected))
 
     @staticmethod
     def _can_deliberate_with(agent_name: str) -> bool:
         return agent_name in {"solver", "misconception", "pedagogy", "hint", "state_manager", "verifier"}
+
+    def _prune_repeated_agents(self, state: TutorGraphState, agents: list[str]) -> list[str]:
+        kept: list[str] = []
+        for agent in agents:
+            if agent == "verifier":
+                kept.append(agent)
+                continue
+            prior_calls = sum(1 for call in state.llm_calls if call.get("agent_name") == agent)
+            if prior_calls < self.config.max_agent_repeats:
+                kept.append(agent)
+        return kept

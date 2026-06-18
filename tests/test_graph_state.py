@@ -91,3 +91,24 @@ def test_budget_controller_does_not_schedule_final_tutor_for_deliberation():
     ]
 
     assert BudgetController().next_agents(state) == ["pedagogy", "verifier"]
+
+
+def test_budget_controller_prunes_repeated_deliberation_agents_but_keeps_verifier():
+    state = TutorGraphState(sample={"sample_id": "s4"}, method="M3")
+    state.llm_calls = [
+        {"agent_name": "solver"},
+        {"agent_name": "pedagogy"},
+        {"agent_name": "verifier"},
+    ]
+    state.agent_outputs["verifier"] = [
+        {
+            "approved": False,
+            "issues": [
+                {"issue_type": "incorrect_answer"},
+                {"issue_type": "pedagogy"},
+                {"issue_type": "misconception"},
+            ],
+        }
+    ]
+
+    assert BudgetController().next_agents(state) == ["misconception", "verifier"]
