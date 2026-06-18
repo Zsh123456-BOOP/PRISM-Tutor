@@ -72,6 +72,31 @@ class VerifierIssue(StrictModel):
         "final_tutor",
     ] | None = None
 
+    @field_validator("issue_type", mode="before")
+    @classmethod
+    def normalize_issue_type(cls, value: Any) -> Any:
+        if value is None:
+            return value
+        normalized = str(value).strip().lower().replace("-", "_").replace(" ", "_")
+        aliases = {
+            "wrong_answer": "incorrect_answer",
+            "numerical_error": "incorrect_answer",
+            "calculation_error": "incorrect_answer",
+            "math_error": "incorrect_answer",
+            "incomplete_work": "incorrect_answer",
+            "weak_skill": "state_conflict",
+            "weak_skills": "state_conflict",
+            "preferred_feedback": "state_conflict",
+            "active_misconceptions": "misconception",
+            "recent_failures": "state_conflict",
+            "overcomplication": "pedagogy",
+            "too_complex": "pedagogy",
+            "scaffolding": "pedagogy",
+            "answer_leakage": "leakage",
+            "safety": "leakage",
+        }
+        return aliases.get(normalized, normalized)
+
     @field_validator("recommended_agent", mode="before")
     @classmethod
     def normalize_recommended_agent(cls, value: Any) -> Any:

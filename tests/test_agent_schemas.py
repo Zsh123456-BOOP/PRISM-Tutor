@@ -179,6 +179,46 @@ def test_verifier_schema_accepts_issue_object():
     assert output.issues[0].issue_type == "leakage"
 
 
+def test_verifier_issue_normalizes_common_issue_type_aliases():
+    numerical = VerifierIssue.model_validate(
+        {
+            "issue_type": "numerical_error",
+            "severity": "medium",
+            "message": "Calculation needs checking.",
+            "recommended_agent": "solver",
+        }
+    )
+    state_update = VerifierIssue.model_validate(
+        {
+            "issue_type": "weak_skills",
+            "severity": "low",
+            "message": "State update should be tentative.",
+            "recommended_agent": "state_manager",
+        }
+    )
+    pedagogy = VerifierIssue.model_validate(
+        {
+            "issue_type": "overcomplication",
+            "severity": "low",
+            "message": "Response is too complex.",
+            "recommended_agent": "pedagogy",
+        }
+    )
+    leakage = VerifierIssue.model_validate(
+        {
+            "issue_type": "answer_leakage",
+            "severity": "high",
+            "message": "Response reveals too much.",
+            "recommended_agent": "hint",
+        }
+    )
+
+    assert numerical.issue_type == "incorrect_answer"
+    assert state_update.issue_type == "state_conflict"
+    assert pedagogy.issue_type == "pedagogy"
+    assert leakage.issue_type == "leakage"
+
+
 def test_verifier_issue_normalizes_common_recommended_agent_aliases():
     corrective = VerifierIssue.model_validate(
         {
