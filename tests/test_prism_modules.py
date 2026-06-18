@@ -323,6 +323,33 @@ def test_exp3_ours_full_uses_state_commit_focused_runtime():
     assert "budget_controller" in graph_config.disabled_modules
 
 
+def test_exp4_ours_full_skips_budget_reverification_but_m2_keeps_it():
+    config = {
+        "experiment": {"name": "exp4_end_to_end"},
+        "thresholds": {},
+        "budget": {"max_rounds": 3, "max_tokens_per_case": 4000},
+        "risk_weights": {},
+    }
+    ours_full = MethodSpec(
+        "ours_full",
+        "M3",
+        "Full PRISM-Tutor runtime",
+        ("risk_estimator", "qos_router", "budget_controller", "state_commit", "final_tutor"),
+    )
+    ours_routing_budget = MethodSpec(
+        "ours_routing_budget",
+        "M2",
+        "PRISM routing and budget",
+        ("risk_estimator", "qos_router", "budget_controller", "final_tutor"),
+    )
+
+    full_config = _prism_graph_config_from_run_config(config, ours_full)
+    budget_config = _prism_graph_config_from_run_config(config, ours_routing_budget)
+
+    assert full_config.budget.verify_after_new_agents is False
+    assert budget_config.budget.verify_after_new_agents is True
+
+
 def test_prism_graph_can_disable_state_commit_for_ablation():
     graph = build_prism_graph("M3", config=PrismGraphConfig(disabled_modules=["state_commit"]))
     result = graph.invoke({"sample": {"sample_id": "s1", "question": "What is 1+1?"}, "method": "M3"})

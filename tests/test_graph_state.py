@@ -132,3 +132,19 @@ def test_budget_controller_stops_when_only_verifier_would_repeat():
     ]
 
     assert BudgetController().next_agents(state) == []
+
+
+def test_budget_controller_can_skip_verifier_after_new_agents():
+    state = TutorGraphState(sample={"sample_id": "s6"}, method="M3")
+    state.agent_outputs["verifier"] = [
+        {
+            "approved": False,
+            "issues": [
+                {"issue_type": "misconception"},
+            ],
+        }
+    ]
+
+    controller = BudgetController(BudgetConfig(verify_after_new_agents=False))
+
+    assert controller.next_agents(state) == ["misconception"]

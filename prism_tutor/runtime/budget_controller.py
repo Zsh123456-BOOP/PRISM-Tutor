@@ -13,6 +13,7 @@ class BudgetConfig(BaseModel):
     max_rounds: int = Field(default=2, ge=1)
     max_tokens: int = Field(default=20000, ge=1)
     max_agent_repeats: int = Field(default=1, ge=1)
+    verify_after_new_agents: bool = True
 
 
 class BudgetController:
@@ -52,7 +53,7 @@ class BudgetController:
                 selected.append("pedagogy")
             elif issue_type == "state_conflict":
                 selected.append("state_manager")
-        if selected:
+        if selected and self.config.verify_after_new_agents:
             selected.append("verifier")
         selected = self._prune_repeated_agents(state, selected)
         if selected == ["verifier"]:

@@ -216,6 +216,7 @@ def _prism_graph_config_from_run_config(config: dict[str, Any], method: MethodSp
         budget=BudgetConfig(
             max_rounds=int(budget.get("max_rounds", 2)),
             max_tokens=token_budget,
+            verify_after_new_agents=base_method != "ours_full",
         ),
         commit=CommitConfig(
             commit_confidence_threshold=float(thresholds.get("misconception_confidence_commit", 0.7)),
