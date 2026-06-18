@@ -51,25 +51,67 @@ def _has_value(value: Any) -> bool:
     return True
 
 
-def _metadata(sample: dict[str, Any]) -> dict[str, Any]:
-    metadata = sample.get("metadata")
-    return metadata if isinstance(metadata, dict) else {}
-
-
 def _has_any(record: dict[str, Any], keys: tuple[str, ...]) -> bool:
     return any(_has_value(record.get(key)) for key in keys)
 
 
+def _visible_text(sample: dict[str, Any]) -> str:
+    parts: list[str] = []
+    for key in (
+        "question",
+        "problem",
+        "problem_text",
+        "student_utterance",
+        "student_answer",
+        "student_solution",
+        "dialogue_text",
+        "context",
+    ):
+        value = sample.get(key)
+        if _has_value(value):
+            parts.append(str(value))
+    return " ".join(parts).lower()
+
+
 def _sample_signals(sample: dict[str, Any]) -> dict[str, bool]:
-    metadata = _metadata(sample)
+    text = _visible_text(sample)
+    has_student_work = _has_any(sample, ("student_utterance", "student_answer", "student_solution"))
+    math_like = any(char.isdigit() for char in text) or any(
+        marker in text
+        for marker in (
+            "+",
+            "-",
+            "*",
+            "/",
+            "=",
+            "solve",
+            "equation",
+            "fraction",
+            "ratio",
+            "percent",
+            "area",
+            "perimeter",
+        )
+    )
+    confusion_like = has_student_work and any(
+        marker in text
+        for marker in (
+            "i think",
+            "i got",
+            "not sure",
+            "confused",
+            "mistake",
+            "wrong",
+            "why",
+            "how",
+        )
+    )
+    dialogue_like = _has_any(sample, ("dialogue", "dialogue_text", "dialogue_history", "dialogue_turns"))
     return {
-        "needs_solver": _has_any(sample, ("gold_answer", "answer", "ground_truth", "correct_answer"))
-        or _has_any(metadata, ("ground_truth", "correct_answer")),
-        "needs_misconception": _has_any(sample, ("student_error", "misconception_label", "misconception_labels"))
-        or _has_any(metadata, ("gold_misconception", "misconception_label", "misconception_labels")),
-        "needs_pedagogy": _has_any(sample, ("remediation_strategy", "teacher_intention", "scaffolding", "tutor_response"))
-        or _has_any(metadata, ("teacher_response", "teacher_intention", "remediation_strategy")),
-        "known_leakage": bool(sample.get("leakage") is True or str(sample.get("leakage", "")).lower() in {"true", "1", "yes"}),
+        "needs_solver": math_like,
+        "needs_misconception": confusion_like or (has_student_work and math_like),
+        "needs_pedagogy": has_student_work or dialogue_like,
+        "known_leakage": False,
     }
 
 
@@ -93,11 +135,11 @@ def estimate_risk(state: TutorGraphState, config: RiskConfig | None = None) -> R
     if misconception.get("misconception_detected") is True:
         misconception_risk = max(misconception_risk, 0.6)
     if signals["needs_misconception"]:
-        misconception_risk = max(misconception_risk, 0.72)
+        misconception_risk = max(misconception_risk, 0.66)
 
     pedagogy_risk = 0.35
     if signals["needs_pedagogy"]:
-        pedagogy_risk = max(pedagogy_risk, 0.68)
+        pedagogy_risk = max(pedagogy_risk, 0.62)
     leakage_risk = float(hint.get("answer_leakage_risk", 0.2))
     if signals["known_leakage"]:
         leakage_risk = max(leakage_risk, 0.65)

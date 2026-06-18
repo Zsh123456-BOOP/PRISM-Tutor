@@ -17,12 +17,13 @@ from prism_tutor.agents.pedagogy import PedagogyAgent
 from prism_tutor.agents.solver import SolverAgent
 from prism_tutor.agents.state_manager import StateManagerAgent
 from prism_tutor.agents.verifier import VerifierAgent
-from prism_tutor.eval.leakage_detector import detect_leakage
 
 from .budget_controller import BudgetConfig, BudgetController
 from .graph_state import TutorGraphState
+from .leakage_guard import detect_runtime_leakage
 from .qos_router import QoSRouter, RouterConfig
 from .risk_estimator import RiskConfig, estimate_risk
+from prism_tutor.data.sample_view import assert_no_gold_fields, build_model_input
 from .state_commit import CommitConfig, StateCommitter
 
 
@@ -83,6 +84,8 @@ class PrismGraph:
 
     def invoke(self, state: TutorGraphState | dict[str, Any]) -> TutorGraphState:
         graph_state = state if isinstance(state, TutorGraphState) else TutorGraphState.model_validate(state)
+        graph_state.sample = build_model_input(graph_state.sample)
+        assert_no_gold_fields(graph_state.sample)
         graph_state.method = self.method
         graph_state.agent_outputs.setdefault("runtime_variant", []).append(self.config.variant)
         if self._module_disabled("risk_estimator"):
@@ -182,7 +185,7 @@ class PrismGraph:
             return
         for retry_index in range(self.config.leakage_guard_max_retries):
             response = self._latest_final_response(state)
-            leakage = detect_leakage(response, gold=self._leakage_gold(state.sample), sample_id=state.sample.get("sample_id"))
+            leakage = detect_runtime_leakage(response, sample_id=state.sample.get("sample_id"))
             if not leakage["rule_leakage"]:
                 return
             state.agent_outputs.setdefault("leakage_guard", []).append(
@@ -205,15 +208,6 @@ class PrismGraph:
                 return str(parsed["response"])
             return str(call.get("stripped_output") or call.get("raw_completion") or "")
         return ""
-
-    @staticmethod
-    def _leakage_gold(sample: dict[str, Any]) -> dict[str, Any]:
-        metadata = sample.get("metadata") if isinstance(sample.get("metadata"), dict) else {}
-        return {
-            "answer": sample.get("answer") or sample.get("gold_answer") or sample.get("correct_answer"),
-            "ground_truth": sample.get("ground_truth") or metadata.get("ground_truth") or metadata.get("correct_answer"),
-            "final_answer": sample.get("final_answer") or metadata.get("final_answer"),
-        }
 
     @staticmethod
     def _ensure_state_manager_for_commit(selected: list[str]) -> list[str]:

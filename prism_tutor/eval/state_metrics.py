@@ -39,8 +39,78 @@ def _events_from_commit_outputs(commit_outputs: list[dict[str, Any]]) -> list[di
     return events
 
 
-def evaluate_state_metrics(record: dict[str, Any]) -> dict[str, Any]:
+def _gold_state(gold: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(gold, dict):
+        return {}
+    metadata = gold.get("metadata") if isinstance(gold.get("metadata"), dict) else {}
+    for key in ("gold_state", "student_state", "state"):
+        value = gold.get(key)
+        if isinstance(value, dict):
+            return value
+        value = metadata.get(key)
+        if isinstance(value, dict):
+            return value
+    misconception = (
+        gold.get("misconception_label")
+        or gold.get("gold_misconception")
+        or metadata.get("misconception_label")
+        or metadata.get("gold_misconception")
+    )
+    return {"active_misconceptions": misconception if isinstance(misconception, list) else [misconception]} if misconception else {}
+
+
+def _final_student_state(record: dict[str, Any]) -> dict[str, Any]:
+    state = record.get("state") if isinstance(record.get("state"), dict) else {}
+    student_state = state.get("student_state")
+    return student_state if isinstance(student_state, dict) else {}
+
+
+def _as_set(value: Any) -> set[str]:
+    if value in (None, "", [], {}):
+        return set()
+    if isinstance(value, (list, tuple, set)):
+        return {str(item).strip().lower() for item in value if str(item).strip()}
+    return {str(value).strip().lower()}
+
+
+def _external_state_metrics(record: dict[str, Any], gold: dict[str, Any] | None) -> dict[str, Any]:
+    target = _gold_state(gold)
+    if not target:
+        return {
+            "external_state_accuracy": None,
+            "external_state_coverage": 0.0,
+            "incorrect_misconception_commit_rate": None,
+            "final_state_contradiction": None,
+            "noisy_state_update_rejection_accuracy": None,
+        }
+    final_state = _final_student_state(record)
+    scored: list[bool] = []
+    contradiction = False
+    for field, gold_value in target.items():
+        gold_set = _as_set(gold_value)
+        pred_set = _as_set(final_state.get(field))
+        if not gold_set:
+            continue
+        scored.append(bool(pred_set & gold_set))
+        if pred_set and pred_set.isdisjoint(gold_set):
+            contradiction = True
+    active_gold = _as_set(target.get("active_misconceptions"))
+    active_pred = _as_set(final_state.get("active_misconceptions"))
+    incorrect_rate = None
+    if active_pred and active_gold:
+        incorrect_rate = len(active_pred - active_gold) / len(active_pred)
+    return {
+        "external_state_accuracy": sum(scored) / len(scored) if scored else None,
+        "external_state_coverage": 1.0 if scored else 0.0,
+        "incorrect_misconception_commit_rate": incorrect_rate,
+        "final_state_contradiction": contradiction if scored else None,
+        "noisy_state_update_rejection_accuracy": None,
+    }
+
+
+def evaluate_state_metrics(record: dict[str, Any], gold: dict[str, Any] | None = None) -> dict[str, Any]:
     events = _events(record)
+    external = _external_state_metrics(record, gold)
     if not events:
         return {
             "state_event_count": 0,
@@ -51,6 +121,7 @@ def evaluate_state_metrics(record: dict[str, Any]) -> dict[str, Any]:
             "tentative_when_conflict_rate": None,
             "commit_with_evidence_rate": None,
             "state_metric_coverage": 0.0,
+            **external,
         }
     conflicts = sum(bool(event.get("conflict") or event.get("type") == "conflict") for event in events)
     commits = [event for event in events if event.get("type") in {"commit", "state_commit"} or "correct" in event]
@@ -75,4 +146,5 @@ def evaluate_state_metrics(record: dict[str, Any]) -> dict[str, Any]:
         "tentative_when_conflict_rate": tentative_conflicts / len(conflict_events) if conflict_events else None,
         "commit_with_evidence_rate": evidence_commits / len(commits) if commits else None,
         "state_metric_coverage": 1.0,
+        **external,
     }

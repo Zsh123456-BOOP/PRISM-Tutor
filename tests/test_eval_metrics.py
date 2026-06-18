@@ -16,7 +16,10 @@ def test_compute_auto_metrics_with_gold_and_leakage():
             "final_response": "The answer is 42.",
             "parsed_output": {"answer": "42", "misconceptions": ["sign"]},
             "parse_success": True,
-            "state": {"events": [{"type": "commit", "correct": True}, {"type": "conflict"}]},
+            "state": {
+                "agent_outputs": {"solver": [{"answer": "42"}]},
+                "events": [{"type": "commit", "correct": True}, {"type": "conflict"}],
+            },
         }
     ]
     gold = [
@@ -34,6 +37,7 @@ def test_compute_auto_metrics_with_gold_and_leakage():
 
     assert row["total_tokens"] == 12
     assert row["token_source"] == "usage.prompt_completion"
+    assert row["solver_correctness"] == 1.0
     assert row["internal_correctness"] == 1.0
     assert row["misconception_f1"] == 2 / 3
     assert row["routing_f1"] == 0.8
@@ -78,6 +82,7 @@ def test_auto_metrics_use_unified_schema_gold_fields():
             "parse_success": True,
             "state": {
                 "agent_outputs": {
+                    "solver": [{"answer": "1/4"}],
                     "misconception": [
                         {"misconception_labels": ["students confuse numerator and denominator"]}
                     ]
@@ -98,6 +103,7 @@ def test_auto_metrics_use_unified_schema_gold_fields():
 
     row = compute_auto_metrics(generations, gold)["record_metrics"][0]
 
+    assert row["solver_correctness_coverage"] == 1.0
     assert row["internal_correctness_coverage"] == 1.0
     assert row["misconception_coverage"] == 1.0
     assert row["misconception_f1"] == 1.0

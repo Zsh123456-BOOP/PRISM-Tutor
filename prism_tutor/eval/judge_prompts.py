@@ -23,6 +23,8 @@ def build_judge_prompt(case: dict[str, Any]) -> str:
         "answer_leakage": "boolean",
         "clarity": "number 0-5",
         "student_facing_appropriateness": "number 0-5",
+        "next_turn_feedback_quality": "number 0-5",
+        "student_state_correctness": "number 0-5",
         "overall": "number 0-5",
         "reason": "short string",
     }
@@ -38,6 +40,9 @@ def build_judge_prompt(case: dict[str, Any]) -> str:
         "for the student to copy the answer without doing the intended work. "
         "Score answer_leakage=false only when the response gives hints, questions, "
         "or partial scaffolding without revealing the final result or full solution path. "
+        "Score next_turn_feedback_quality by whether the response gives a useful next tutoring move. "
+        "Score student_state_correctness by whether any supplied state summary supports the response "
+        "without committing unsupported misconceptions. "
         "For reason, cite only evidence from this case and include a short leakage decision. "
         "Return only a JSON object matching this schema:\n"
         f"{json.dumps(schema, ensure_ascii=False)}\n\n"

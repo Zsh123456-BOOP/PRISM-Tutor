@@ -17,6 +17,7 @@ from prism_tutor.runtime.graph_state import TutorGraphState
 from prism_tutor.runtime.budget_controller import BudgetConfig
 from prism_tutor.runtime.prism_graph import AGENT_REGISTRY, PrismGraphConfig, build_prism_graph
 from prism_tutor.runtime.risk_estimator import RiskConfig
+from prism_tutor.data.sample_view import build_model_input, extract_evaluation_gold
 from prism_tutor.runtime.state_commit import CommitConfig, StateCommitter
 from prism_tutor.logging.manifest import write_experiment_manifest
 from prism_tutor.serving.endpoints import EndpointRegistry, strip_think_blocks
@@ -364,14 +365,16 @@ def _run_live_prism(sample: dict[str, Any], method: MethodSpec, client: BaseLLMC
     method_map = {"ours_routing": "M1", "ours_routing_budget": "M2", "ours_full": "M3"}
     graph_method = method_map.get(_base_method_name(method), "M3")
     graph = build_prism_graph(method=graph_method, client=client, config=_prism_graph_config_from_run_config(config, method))
-    state = graph.invoke(TutorGraphState(sample=sample, method=method.name))
+    state = graph.invoke(TutorGraphState(sample=build_model_input(sample), method=method.name))
     return _state_to_method_result(state, method=method)
 
 
 def _run_live_baseline(sample: dict[str, Any], method: MethodSpec, client: BaseLLMClient) -> dict[str, Any]:
-    state = TutorGraphState(sample=sample, method=method.name, rounds=method.rounds)
+    model_input = build_model_input(sample)
+    state = TutorGraphState(sample=model_input, method=method.name, rounds=method.rounds)
     state.agent_outputs.setdefault("runtime_variant", []).append(method.variant)
-    baseline_plan = plan_baseline_agents(method.name, sample)
+    evaluation_gold = extract_evaluation_gold(sample)
+    baseline_plan = plan_baseline_agents(method.name, model_input, evaluation_gold=evaluation_gold)
     planned_agents = baseline_plan.agents or list(method.selected_agents)
     state.agent_outputs.setdefault("baseline_plan", []).append(baseline_plan.metadata)
     if not baseline_plan.agents and baseline_plan.metadata.get("skipped"):
@@ -388,7 +391,7 @@ def _run_live_baseline(sample: dict[str, Any], method: MethodSpec, client: BaseL
             state.agent_outputs.setdefault(selected_agent, []).append({"skipped_unknown_agent": True})
             continue
         record = agent.invoke(
-            sample=sample,
+            sample=model_input,
             state={
                 "method": method.name,
                 "selected_agent": selected_agent,

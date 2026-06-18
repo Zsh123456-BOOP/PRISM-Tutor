@@ -1,5 +1,6 @@
 from prism_tutor.agents.base_client import BaseLLMClient, LLMClientConfig
 from prism_tutor.agents.parser import parse_agent_json
+from prism_tutor.agents.prompts import build_agent_messages
 from prism_tutor.agents.schemas import AGENT_SCHEMAS
 from prism_tutor.agents.types import LLMCallRecord, LLMUsage
 from prism_tutor.experiments.method_registry import MethodSpec
@@ -8,6 +9,7 @@ from prism_tutor.runtime.graph_state import TutorGraphState
 from prism_tutor.runtime.prism_graph import PrismGraphConfig, build_prism_graph
 from prism_tutor.runtime.qos_router import QoSRouter
 from prism_tutor.runtime.risk_estimator import RiskConfig, estimate_risk
+from prism_tutor.data.sample_view import build_model_input
 from prism_tutor.runtime.state_commit import StateCommitter
 
 
@@ -34,15 +36,15 @@ def test_router_selects_low_medium_high_agents():
     assert "state_manager" in selected
 
 
-def test_risk_estimator_uses_dataset_schema_signals_for_routing():
+def test_risk_estimator_uses_visible_student_signals_for_routing():
     state = TutorGraphState(
         sample={
             "sample_id": "bridge-1",
             "problem_text": "Solve 8 / 2.",
             "student_utterance": "I think it is 6.",
-            "student_error": "operation_confusion",
-            "remediation_strategy": "contrast",
-            "teacher_intention": "clarify_misunderstanding",
+            "student_error": "forbidden_gold_error",
+            "remediation_strategy": "forbidden_gold_strategy",
+            "teacher_intention": "forbidden_gold_intention",
         },
         method="M1",
     )
@@ -52,10 +54,45 @@ def test_risk_estimator_uses_dataset_schema_signals_for_routing():
 
     assert risk.misconception_risk >= 0.6
     assert risk.pedagogy_risk >= 0.6
-    assert risk.answer_uncertainty < 0.7
-    assert {"misconception", "pedagogy", "verifier", "final_tutor"}.issubset(set(selected))
-    assert "solver" not in selected
+    assert risk.answer_uncertainty >= 0.7
+    assert {"solver", "misconception", "pedagogy", "verifier", "final_tutor"}.issubset(set(selected))
     assert "hint" not in selected
+
+
+def test_model_input_strips_gold_fields_from_agent_prompt():
+    sample = {
+        "sample_id": "s1",
+        "problem": "What is 2+2?",
+        "student_utterance": "I think it is 5.",
+        "ground_truth": "4",
+        "misconception_label": "addition_error",
+        "metadata": {"correct_answer": "4", "topic": "addition"},
+    }
+
+    model_input = build_model_input(sample)
+    messages = build_agent_messages("solver", sample, {})
+    prompt = messages[-1]["content"]
+
+    assert "ground_truth" not in model_input
+    assert "misconception_label" not in model_input
+    assert "correct_answer" not in prompt
+    assert "addition_error" not in prompt
+    assert "topic" in prompt
+
+
+def test_risk_estimator_is_stable_under_fake_gold_changes():
+    visible = {
+        "sample_id": "s1",
+        "problem": "What is 2+2?",
+        "student_utterance": "I think it is 5.",
+    }
+    a = {**visible, "ground_truth": "4", "misconception_label": "addition_error"}
+    b = {**visible, "ground_truth": "999", "misconception_label": "ratio_error"}
+
+    risk_a = estimate_risk(TutorGraphState(sample=build_model_input(a), method="M1"))
+    risk_b = estimate_risk(TutorGraphState(sample=build_model_input(b), method="M1"))
+
+    assert risk_a.model_dump(mode="json") == risk_b.model_dump(mode="json")
 
 
 def test_prism_graph_routes_dynamically_from_sample_schema():
@@ -263,9 +300,9 @@ def test_prism_graph_budget_loop_prunes_repeated_agent_calls():
     }
     assert call_counts["solver"] == 1
     assert call_counts["pedagogy"] == 1
-    assert call_counts["misconception"] == 0
+    assert call_counts["misconception"] == 1
     assert call_counts["state_manager"] == 1
-    assert call_counts["verifier"] > 1
+    assert call_counts["verifier"] == 1
     assert call_counts["final_tutor"] == 1
 
 
@@ -373,6 +410,7 @@ def test_prism_graph_injects_noisy_agent_outputs_deterministically():
             "sample": {
                 "sample_id": "s1",
                 "question": "What is 1+1?",
+                "student_utterance": "I think it is 3.",
                 "scaffolding": ["probing"],
                 "metadata": {"ground_truth": "2"},
             },

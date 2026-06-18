@@ -21,14 +21,14 @@ DEFAULT_METRICS = [
     "agent_calls",
     "rounds",
     "parse_success",
-    "internal_correctness",
+    "solver_correctness",
     "misconception_f1",
-    "routing_f1",
-    "state_conflict_rate",
+    "external_state_accuracy",
+    "tutor_math_correctness",
+    "next_turn_feedback_quality",
     "final_leakage",
     "judge_leakage",
     "leakage_conflict",
-    "rule_leakage",
 ]
 
 TABLE_SPECS = [

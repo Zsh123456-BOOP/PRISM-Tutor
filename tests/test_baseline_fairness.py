@@ -57,7 +57,7 @@ def test_oracle_routing_handles_list_valued_gold_fields() -> None:
         "misconception_label": ["ratio_confusion"],
     }
 
-    plan = oracle_routing_plan(sample)
+    plan = oracle_routing_plan({}, evaluation_gold=sample)
 
     assert plan.metadata["strategy"] == "oracle_routing"
     assert plan.metadata["upper_bound"] is True
@@ -77,8 +77,8 @@ def test_oracle_routing_reads_unified_schema_gold_metadata() -> None:
         "student_error": "guess",
     }
 
-    assert oracle_routing_plan(mathdial).metadata["upper_bound"] is True
-    assert oracle_routing_plan(bridge).metadata["upper_bound"] is True
+    assert oracle_routing_plan({}, evaluation_gold=mathdial).metadata["upper_bound"] is True
+    assert oracle_routing_plan({}, evaluation_gold=bridge).metadata["upper_bound"] is True
 
 
 def test_baseline_dry_run_keeps_model_generation_config_and_samples_aligned(tmp_path: Path) -> None:

@@ -111,18 +111,19 @@ def _has_value(value: Any) -> bool:
     return True
 
 
-def oracle_routing_plan(sample: dict[str, Any]) -> BaselinePlan:
-    metadata = sample.get("metadata") if isinstance(sample.get("metadata"), dict) else {}
+def oracle_routing_plan(sample: dict[str, Any], *, evaluation_gold: dict[str, Any] | None = None) -> BaselinePlan:
+    gold = evaluation_gold or {}
+    metadata = gold.get("metadata") if isinstance(gold.get("metadata"), dict) else {}
     has_gold = any(
         _has_value(value)
         for value in (
-            sample.get("gold_answer"),
-            sample.get("gold_misconception"),
-            sample.get("misconception_label"),
-            sample.get("teacher_response"),
-            sample.get("tutor_response"),
-            sample.get("student_error"),
-            sample.get("remediation_strategy"),
+            gold.get("gold_answer"),
+            gold.get("gold_misconception"),
+            gold.get("misconception_label"),
+            gold.get("teacher_response"),
+            gold.get("tutor_response"),
+            gold.get("student_error"),
+            gold.get("remediation_strategy"),
             metadata.get("ground_truth"),
             metadata.get("correct_answer"),
             metadata.get("student_incorrect_solution"),
@@ -134,7 +135,12 @@ def oracle_routing_plan(sample: dict[str, Any]) -> BaselinePlan:
     return BaselinePlan(agents, {"strategy": "oracle_routing", "upper_bound": True})
 
 
-def plan_baseline_agents(method_name: str, sample: dict[str, Any]) -> BaselinePlan:
+def plan_baseline_agents(
+    method_name: str,
+    sample: dict[str, Any],
+    *,
+    evaluation_gold: dict[str, Any] | None = None,
+) -> BaselinePlan:
     planners = {
         "single_tutor": single_tutor_plan,
         "fixed_2": fixed_2_reflection_plan,
@@ -159,4 +165,6 @@ def plan_baseline_agents(method_name: str, sample: dict[str, Any]) -> BaselinePl
     planner = planners.get(base_method)
     if planner is None:
         return BaselinePlan([], {"strategy": "unknown_baseline", "base_method": base_method})
+    if base_method == "oracle_routing":
+        return oracle_routing_plan(sample, evaluation_gold=evaluation_gold)
     return planner(sample)

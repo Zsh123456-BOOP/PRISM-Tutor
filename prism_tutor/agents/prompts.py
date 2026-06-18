@@ -7,6 +7,8 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from prism_tutor.data.sample_view import build_model_input
+
 from .schemas import AGENT_SCHEMAS
 
 
@@ -42,7 +44,7 @@ def build_agent_messages(
         "You must satisfy this JSON schema exactly:\n"
         f"{schema_text(schema)}"
     )
-    payload = {"sample": sample, "runtime_state": state or {}}
+    payload = {"sample": build_model_input(sample), "runtime_state": state or {}}
     if error_summary:
         payload["previous_error"] = error_summary
         payload["retry_instruction"] = "Repair the output. Return one JSON object only."

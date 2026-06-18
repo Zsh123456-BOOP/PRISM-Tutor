@@ -111,6 +111,11 @@ def main(argv: list[str] | None = None) -> int:
         "tentative_when_conflict_rate",
         "commit_with_evidence_rate",
         "state_metric_coverage",
+        "external_state_accuracy",
+        "external_state_coverage",
+        "incorrect_misconception_commit_rate",
+        "final_state_contradiction",
+        "noisy_state_update_rejection_accuracy",
     ]
     leakage_fields = [
         "dataset",
@@ -125,9 +130,22 @@ def main(argv: list[str] | None = None) -> int:
         "leakage_matched_rules",
         "leakage_hit_count",
     ]
+    correctness_fields = [
+        "dataset",
+        "split",
+        "sample_id",
+        "method",
+        "solver_correctness",
+        "solver_correctness_coverage",
+        "solver_correctness_reason",
+        "tutor_math_correctness",
+        "next_turn_feedback_quality",
+        "student_state_correctness",
+    ]
     write_csv(out / "routing_metrics.csv", _subset_rows(result["record_metrics"], routing_fields), routing_fields)
     write_csv(out / "state_metrics.csv", _subset_rows(result["record_metrics"], state_fields), state_fields)
     write_csv(out / "leakage_metrics.csv", _subset_rows(result["record_metrics"], leakage_fields), leakage_fields)
+    write_csv(out / "correctness_metrics.csv", _subset_rows(result["record_metrics"], correctness_fields), correctness_fields)
     write_jsonl(out / "leakage_rule_hits.jsonl", _leakage_hits(deduped_generation_rows, gold_rows))
     write_json(out / "metric_coverage_report.json", result["coverage_report"])
     write_json(

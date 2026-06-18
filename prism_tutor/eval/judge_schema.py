@@ -14,8 +14,15 @@ SCORE_FIELDS = [
     "answer_leakage",
     "clarity",
     "student_facing_appropriateness",
+    "next_turn_feedback_quality",
+    "student_state_correctness",
     "overall",
 ]
+
+OPTIONAL_SCORE_FIELDS = {
+    "next_turn_feedback_quality": 3.0,
+    "student_state_correctness": 3.0,
+}
 
 
 @dataclass(frozen=True)
@@ -27,6 +34,8 @@ class JudgeScore:
     answer_leakage: bool
     clarity: float
     student_facing_appropriateness: float
+    next_turn_feedback_quality: float
+    student_state_correctness: float
     overall: float
     reason: str
 
@@ -47,11 +56,15 @@ def _parse_bool(value: Any, field: str) -> bool:
 
 
 def validate_score(payload: dict[str, Any]) -> JudgeScore:
-    missing = [field for field in SCORE_FIELDS + ["reason"] if field not in payload]
+    required_fields = [field for field in SCORE_FIELDS if field not in OPTIONAL_SCORE_FIELDS]
+    missing = [field for field in required_fields + ["reason"] if field not in payload]
     if missing:
         raise ValueError(f"judge score missing fields: {', '.join(missing)}")
     values: dict[str, Any] = {}
     for field in SCORE_FIELDS:
+        if field not in payload and field in OPTIONAL_SCORE_FIELDS:
+            values[field] = OPTIONAL_SCORE_FIELDS[field]
+            continue
         if field == "answer_leakage":
             values[field] = _parse_bool(payload[field], field)
             continue
@@ -87,6 +100,8 @@ def default_mock_score(leakage: bool = False) -> JudgeScore:
         answer_leakage=leakage,
         clarity=3.0,
         student_facing_appropriateness=3.0,
+        next_turn_feedback_quality=3.0,
+        student_state_correctness=3.0,
         overall=3.0,
         reason="mock judge score; no external API call was made",
     )
