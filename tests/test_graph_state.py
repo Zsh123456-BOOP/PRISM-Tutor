@@ -112,3 +112,23 @@ def test_budget_controller_prunes_repeated_deliberation_agents_but_keeps_verifie
     ]
 
     assert BudgetController().next_agents(state) == ["misconception", "verifier"]
+
+
+def test_budget_controller_stops_when_only_verifier_would_repeat():
+    state = TutorGraphState(sample={"sample_id": "s5"}, method="M3")
+    state.llm_calls = [
+        {"agent_name": "solver"},
+        {"agent_name": "pedagogy"},
+        {"agent_name": "verifier"},
+    ]
+    state.agent_outputs["verifier"] = [
+        {
+            "approved": False,
+            "issues": [
+                {"issue_type": "incorrect_answer"},
+                {"issue_type": "pedagogy"},
+            ],
+        }
+    ]
+
+    assert BudgetController().next_agents(state) == []

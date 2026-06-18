@@ -55,6 +55,8 @@ class BudgetController:
         if selected:
             selected.append("verifier")
         selected = self._prune_repeated_agents(state, selected)
+        if selected == ["verifier"]:
+            return []
         return list(dict.fromkeys(selected))
 
     @staticmethod
