@@ -1,0 +1,53 @@
+{
+  "commit": "e1e8ebe",
+  "created_for": "GPT Pro review of PRISM-Tutor smoke results",
+  "remote_host": "zsh@10.154.22.11",
+  "remote_project": "/home/zsh/projects/PRISM-Tutor",
+  "public_artifact_policy": {
+    "included": [
+      "aggregate automatic metrics",
+      "per-record automatic metric values",
+      "metric coverage reports",
+      "metric alignment reports",
+      "compact leakage rule-hit snippets"
+    ],
+    "excluded": [
+      "raw prompts",
+      "raw completions",
+      "server logs",
+      "datasets",
+      "model weights",
+      "API keys",
+      "environment files"
+    ]
+  },
+  "runs": [
+    {
+      "name": "exp4_end_to_end_smoke_e1e8ebe",
+      "remote_metrics_path": "outputs/runs/exp4_end_to_end_smoke_e1e8ebe/metrics_partial_1358",
+      "local_path": "results/smoke_metrics/exp4_end_to_end_smoke_e1e8ebe",
+      "rows": 1358,
+      "purpose": "End-to-end smoke after runtime fixes",
+      "status": "completed",
+      "key_result": "ours_full: leakage 0, unsafe commit 0, commit-with-evidence 1.0; ours_routing routing_f1 1.0 on this smoke subset"
+    },
+    {
+      "name": "exp5_ablation_smoke_e1e8ebe",
+      "remote_metrics_path": "outputs/runs/exp5_ablation_smoke_e1e8ebe/metrics",
+      "local_path": "results/smoke_metrics/exp5_ablation_smoke_e1e8ebe",
+      "rows": 990,
+      "purpose": "Ablation smoke across 11 method variants",
+      "status": "completed",
+      "key_result": "risk estimator and QoS routing ablations reduce routing_f1; naive memory shows nonzero rule leakage while ours_full remains zero"
+    },
+    {
+      "name": "exp6_robustness_smoke_e1e8ebe",
+      "remote_metrics_path": "outputs/runs/exp6_robustness_smoke_e1e8ebe/metrics",
+      "local_path": "results/smoke_metrics/exp6_robustness_smoke_e1e8ebe",
+      "rows": 1008,
+      "purpose": "Robustness smoke across noisy-agent and budget variants",
+      "status": "completed",
+      "key_result": "ours_full keeps leakage 0, unsafe commit 0, commit-with-evidence 1.0, and routing_f1 0.8889 across tested variants"
+    }
+  ]
+}

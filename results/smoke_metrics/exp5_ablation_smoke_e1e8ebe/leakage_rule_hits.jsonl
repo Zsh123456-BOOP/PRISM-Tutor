@@ -1,0 +1,1 @@
+{"dataset": "bridge", "end": 160, "evidence": "the answer is", "method": "replace_two_phase_commit_with_naive_memory", "rule": "direct_answer_phrase", "sample_id": "bridge:12304961ebfe67509892", "severity": "medium", "split": "test", "start": 147}

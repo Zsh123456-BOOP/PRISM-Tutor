@@ -1,0 +1,28 @@
+{
+  "duplicate_generation_count": 0,
+  "duplicate_judge_count": 0,
+  "duplicate_judge_key_count": 0,
+  "duplicate_key_count": 0,
+  "generation_count": 1008,
+  "gold_count": 19529,
+  "ignored_invalid_after_valid_judge_count": 0,
+  "judge_count": 0,
+  "judge_invalid_count": 0,
+  "judge_matched_count": 0,
+  "metrics_with_missing_gold": {
+    "internal_correctness": 346,
+    "misconception": 682,
+    "routing": 0
+  },
+  "missing_sample_count": 19487,
+  "orphan_generation_count": 0,
+  "orphan_judge_count": 0,
+  "parse_failure_count": 10,
+  "raw_generation_count": 1008,
+  "raw_judge_count": 0,
+  "repeated_invalid_judge_duplicate_count": 0,
+  "repeated_success_duplicate_count": 0,
+  "repeated_valid_judge_duplicate_count": 0,
+  "replaced_failed_with_success_count": 0,
+  "replaced_invalid_with_valid_judge_count": 0
+}

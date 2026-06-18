@@ -1,0 +1,1 @@
+{"dataset": "misconception", "end": 380, "evidence": "plug it into the equation 4p + 40 = 60 and check if both sides are equal. Can you try that", "method": "generic_sparse__noise0p2__budget1000", "rule": "key_step_disclosure", "sample_id": "misconception:071e4a5b8090f56593c2", "severity": "medium", "split": "test", "start": 290}
