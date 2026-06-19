@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import random
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -89,6 +91,21 @@ def generic_sparse_plan(sample: dict[str, Any], *, top_k: int = 3) -> BaselinePl
     return BaselinePlan(selected, {"strategy": "generic_sparse", "scores": scored, "forbidden_fields": sorted(EDUCATIONAL_RISK_FIELDS)})
 
 
+def random_routing_plan(sample: dict[str, Any]) -> BaselinePlan:
+    """Routing baseline that selects a random agent subset (seeded by sample id for
+    reproducibility). This is the negative control for Exp1: it isolates whether
+    PRISM's gains come from routing the RIGHT agents vs merely routing SOME agents.
+    It reads no gold and no educational-risk fields."""
+    pool = ["solver", "misconception", "pedagogy", "hint", "verifier"]
+    seed_key = str(sample.get("sample_id") or sample.get("id") or _problem_text(sample))
+    seed = int(hashlib.sha256(seed_key.encode("utf-8")).hexdigest()[:12], 16)
+    rng = random.Random(seed)
+    chosen = rng.sample(pool, rng.randint(1, len(pool)))
+    if "final_tutor" not in chosen:
+        chosen.append("final_tutor")
+    return BaselinePlan(chosen, {"strategy": "random_routing", "seed": seed})
+
+
 def difficulty_routing_plan(sample: dict[str, Any]) -> BaselinePlan:
     score = _difficulty_score(sample)
     if score < 0.35:
@@ -149,7 +166,7 @@ def plan_baseline_agents(
         "generic_sparse": generic_sparse_plan,
         "difficulty_routing": difficulty_routing_plan,
         "oracle_routing": oracle_routing_plan,
-        "random_routing": generic_sparse_plan,
+        "random_routing": random_routing_plan,
         "fixed_all_agents": fixed_4_full_plan,
         "single_round": single_tutor_plan,
         "fixed_2_rounds": fixed_2_reflection_plan,

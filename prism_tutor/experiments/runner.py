@@ -410,16 +410,20 @@ def _run_live_baseline(sample: dict[str, Any], method: MethodSpec, client: BaseL
     if not baseline_plan.agents and baseline_plan.metadata.get("skipped"):
         state.termination_reason = str(baseline_plan.metadata.get("skip_reason", "baseline_skipped"))
         return _state_to_method_result(state, method=method)
-    state.selected_agents.extend(planned_agents)
-    for selected_agent in planned_agents:
+    rounds = max(1, int(method.rounds))
+    non_final = [agent for agent in planned_agents if _callable_agent_name(agent) != "final_tutor"]
+    final_agents = [agent for agent in planned_agents if _callable_agent_name(agent) == "final_tutor"]
+
+    def _run_one(selected_agent: str) -> None:
+        state.selected_agents.append(selected_agent)
         agent_name = _callable_agent_name(selected_agent)
         if agent_name is None:
             state.agent_outputs.setdefault(selected_agent, []).append({"control_only": True})
-            continue
+            return
         agent = AGENT_REGISTRY.get(agent_name)
         if agent is None:
             state.agent_outputs.setdefault(selected_agent, []).append({"skipped_unknown_agent": True})
-            continue
+            return
         record = agent.invoke(
             sample=model_input,
             state={
@@ -439,6 +443,17 @@ def _run_live_baseline(sample: dict[str, Any], method: MethodSpec, client: BaseL
             )
             build_prism_graph(client=client, config=graph_config)._maybe_inject_noisy_output(state, record)
         state.add_call(record)
+
+    # Faithful fixed-K-round / debate baselines: deliberate the non-final agents K
+    # times (each pass sees the accumulated outputs), so cost scales with rounds.
+    # The student-facing response is produced once at the end. fixed_4 / single_tutor
+    # have rounds=1 and are unchanged; debate (2) / fixed_3/4_rounds (3/4) now truly
+    # iterate, which is what gives Exp2 / Exp1 a real, fair contrast against ours.
+    for _round in range(rounds):
+        for selected_agent in non_final:
+            _run_one(selected_agent)
+    for selected_agent in final_agents:
+        _run_one(selected_agent)
     _apply_baseline_state_commit(state, method)
     return _state_to_method_result(state, method=method)
 

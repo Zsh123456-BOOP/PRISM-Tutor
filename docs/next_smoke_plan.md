@@ -1,5 +1,19 @@
 # Next smoke plan — for Codex to run on the server
 
+## Round-4 changes (baseline FIDELITY — needed for Exp1/Exp2 to mean anything)
+The round/debate/random baselines were not faithful, so the efficiency narrative had
+no expensive baseline to beat and "debate" didn't debate:
+- `debate` / `fixed_2/3/4_rounds` now genuinely deliberate K rounds (non-final agents
+  run K times over accumulating context; the response is produced once). Cost now
+  scales with rounds: single 1, fixed_4 5, debate 9, fixed_3_rounds 10, fixed_4_rounds
+  17 agent calls. fixed_4 (B2, 1 round) is unchanged.
+- `random_routing` is now an actual seeded-random agent subset (was aliased to the
+  deterministic generic-sparse planner) — the real negative control for Exp1.
+=> The confirmation smoke MUST include Exp1 (routing) and Exp2 (budget), not just
+Exp4/Exp5, so these contrasts are exercised. Expected: ours (1-2 rounds) is clearly
+cheaper than debate / fixed_3/4_rounds at parity quality — this is where the Pareto/
+efficiency claim lives (NOT ours < fixed_4).
+
 ## Round-3 changes (since main_bbb8aac; what THIS run validates)
 bbb8aac passed gates 1 (parse 0.08%), 3 (misconception F1 parity: ours 0.37-0.38 ≥
 fixed_4 0.34), 4 (solver ~0.75). It failed 5 (state) and 7 (cost). Root causes found
@@ -42,10 +56,16 @@ gold metrics were noise. It also predates: misconception/pedagogy routing on a
 student-answer signal (T1), real `rounds` logging (T2), solver thinking + per-agent
 token budgets (T4), and the `hit@1/@3` diagnostics (T3). Re-run on the new commit.
 
-## Scope
+## Scope (cover ALL experiments, not just Exp4/5 — each narrative needs its contrast)
 - Datasets: MathDial test, Bridge test, Misconception Benchmark (all 220).
-- Methods (Exp4 core): `single_tutor, fixed_2, fixed_4, debate, generic_sparse,
+- Exp4 core: `single_tutor, fixed_2, fixed_4, debate, generic_sparse,
   difficulty_routing, ours_routing, ours_routing_budget, ours_full`.
+- Exp1 routing: `random_routing, fixed_all_agents, difficulty_routing, generic_sparse,
+  oracle_routing, ours_routing` (random is now a real negative control).
+- Exp2 budget: `single_round, fixed_2_rounds, fixed_3_rounds, fixed_4_rounds, debate,
+  generic_early_stopping, ours_routing_budget` (round baselines now truly iterate →
+  the token-quality Pareto / risk-bucket curve lives here).
+- Exp3 state: `no_memory, naive_shared_memory, single_writer, two_phase_commit, ours_full`.
 - Key Exp5 ablations: `ablate_qos_routing, ablate_budget_controller, ablate_state_commit,
   ablate_misconception_risk, replace_two_phase_commit_with_naive_memory`.
 - Unique samples: **≥60 per dataset** for MathDial/Bridge; all 220 for Misconception.
