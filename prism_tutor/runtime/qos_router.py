@@ -36,9 +36,13 @@ class QoSRouter:
 
         if risk.leakage_risk >= 0.6:
             selected = self._ensure(selected, ["pedagogy", "verifier"])
-        if risk.misconception_risk >= 0.6:
+        # Diagnosis agents route at a lower threshold than deliberation-driving
+        # signals: a medium misconception/pedagogy signal (e.g. a student answer
+        # present) selects the agent, but does not by itself push the risk bucket
+        # to "high" -- this decouples WHICH agents run from HOW MANY rounds run.
+        if risk.misconception_risk >= 0.45:
             selected = self._ensure(selected, ["misconception", "verifier"])
-        if risk.pedagogy_risk >= 0.6:
+        if risk.pedagogy_risk >= 0.45:
             selected = self._ensure(selected, ["pedagogy", "verifier"])
         if risk.state_conflict_risk >= 0.6:
             selected = self._ensure(selected, ["state_manager", "verifier"])

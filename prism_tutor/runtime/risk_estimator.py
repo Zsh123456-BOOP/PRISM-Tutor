@@ -152,11 +152,22 @@ def estimate_risk(state: TutorGraphState, config: RiskConfig | None = None) -> R
         misconception_risk = max(misconception_risk, 0.66)
     if signals["confusion"]:
         misconception_risk = max(misconception_risk, 0.62)
+    # Structural diagnosis floor: whenever a student has actually produced an
+    # answer to a problem there is something to diagnose, so the misconception
+    # agent should be routed (this is the case the Misconception Benchmark tests
+    # and where confusion keywords are usually absent). Kept at a medium level so
+    # it triggers routing (router threshold 0.45) WITHOUT forcing the deliberation
+    # bucket to high; ablate_misconception_risk still zeroes this downstream.
+    if signals["has_student_work"]:
+        misconception_risk = max(misconception_risk, 0.5)
 
-    # Pedagogy risk: graded by difficulty; escalated for dialogue / confused turns.
+    # Pedagogy risk: graded by difficulty; escalated for dialogue / confused turns
+    # and whenever we are responding to a student's answer.
     pedagogy_risk = 0.3 + 0.3 * difficulty
     if signals["dialogue_like"] or signals["confusion"]:
         pedagogy_risk = max(pedagogy_risk, 0.6)
+    if signals["has_student_work"]:
+        pedagogy_risk = max(pedagogy_risk, 0.5)
     leakage_risk = float(hint.get("answer_leakage_risk", 0.15))
     if signals["known_leakage"]:
         leakage_risk = max(leakage_risk, 0.65)

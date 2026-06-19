@@ -23,6 +23,7 @@ DEFAULT_METRICS = [
     "parse_success",
     "solver_correctness",
     "misconception_f1",
+    "misconception_hit_at_3",
     "external_state_accuracy",
     "tutor_math_correctness",
     "next_turn_feedback_quality",

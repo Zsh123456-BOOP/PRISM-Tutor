@@ -47,9 +47,10 @@ def build_agent_messages(
     )
     if agent_name == "misconception" and model_input.get("candidate_misconceptions"):
         system += (
-            "\nClassification constraint: populate misconception_labels ONLY with labels copied "
+            "\nClassification constraint: misconception_labels must contain ONLY labels copied "
             "verbatim from sample.candidate_misconceptions (the fixed benchmark taxonomy). "
-            "Return an empty list if none apply. Do not invent new label text."
+            "List the 1-3 most likely labels, MOST LIKELY FIRST. Return an empty list only if "
+            "none apply. Do not invent new label text."
         )
     payload = {"sample": model_input, "runtime_state": state or {}}
     if error_summary:

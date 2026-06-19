@@ -147,6 +147,36 @@ def test_misconception_constrained_classification_uses_candidate_space():
     assert row["misconception_f1"] == 1.0
 
 
+def test_misconception_hit_at_k_uses_prediction_order():
+    candidates = ["A misconception text", "B misconception text", "C misconception text"]
+    generations = [
+        {
+            "sample_id": "m1",
+            "dataset": "misconception",
+            "split": "test",
+            "method": "ours_full",
+            "parse_success": True,
+            "final_response": "x",
+            "state": {
+                "agent_outputs": {
+                    "misconception": [{"misconception_labels": ["B misconception text", "A misconception text"]}]
+                }
+            },
+        }
+    ]
+    gold = [
+        {
+            "sample_id": "m1",
+            "dataset": "misconception",
+            "misconception_label": "A misconception text",
+            "candidate_misconceptions": candidates,
+        }
+    ]
+    row = compute_auto_metrics(generations, gold)["record_metrics"][0]
+    assert row["misconception_hit_at_1"] == 0.0  # gold "A" is ranked second
+    assert row["misconception_hit_at_3"] == 1.0  # gold "A" is within the top 3
+
+
 def test_misconception_unrelated_prediction_scores_zero_in_candidate_space():
     candidates = ["students confuse numerator and denominator"]
     generations = [

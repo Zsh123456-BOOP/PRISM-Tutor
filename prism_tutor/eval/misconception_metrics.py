@@ -51,6 +51,18 @@ def precision_recall_f1(predicted: Any, gold: Any) -> dict[str, Any]:
     }
 
 
+def _as_ordered_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value] if value else []
+    if isinstance(value, dict):
+        return [str(key) for key, enabled in value.items() if enabled]
+    if isinstance(value, (list, tuple, set)):
+        return [str(item) for item in value if item is not None and str(item) != ""]
+    return [str(value)]
+
+
 def evaluate_misconceptions(record: dict[str, Any], gold: dict[str, Any]) -> dict[str, Any]:
     parsed = record.get("parsed_output") if isinstance(record.get("parsed_output"), dict) else {}
     state = record.get("state") if isinstance(record.get("state"), dict) else {}
@@ -59,7 +71,7 @@ def evaluate_misconceptions(record: dict[str, Any], gold: dict[str, Any]) -> dic
     predicted_from_agent: list[str] = []
     for output in misconception_outputs:
         if isinstance(output, dict):
-            predicted_from_agent.extend(_as_set(output.get("misconception_labels")))
+            predicted_from_agent.extend(_as_ordered_list(output.get("misconception_labels")))
     predicted = (
         parsed.get("misconceptions")
         or parsed.get("misconception_labels")
@@ -67,6 +79,7 @@ def evaluate_misconceptions(record: dict[str, Any], gold: dict[str, Any]) -> dic
         or record.get("misconceptions")
         or predicted_from_agent
     )
+    predicted_list = _as_ordered_list(predicted)
     expected = (
         gold.get("misconceptions")
         or gold.get("gold_misconceptions")
@@ -79,7 +92,22 @@ def evaluate_misconceptions(record: dict[str, Any], gold: dict[str, Any]) -> dic
     # raw set-overlap behavior so other datasets/tests are unaffected.
     candidates = gold.get("candidate_misconceptions")
     if isinstance(candidates, list) and candidates:
-        mapped = {canonicalize_label(label, candidates) for label in _as_set(predicted)}
-        predicted = {label for label in mapped if label}
-    result = precision_recall_f1(predicted, expected)
-    return {f"misconception_{key}": value for key, value in result.items()}
+        canonical: list[str] = []
+        for label in predicted_list:
+            mapped = canonicalize_label(label, candidates)
+            if mapped and mapped not in canonical:
+                canonical.append(mapped)
+        predicted_list = canonical
+    result = precision_recall_f1(predicted_list, expected)
+    output = {f"misconception_{key}": value for key, value in result.items()}
+    # Ranked diagnostics: is the gold label in the top-1 / top-3 predictions?
+    # Separates "named the right misconception at all" from "ranked it first",
+    # which is the relevant lens for a 55-way classification.
+    gold_set = _as_set(expected)
+    if gold_set:
+        output["misconception_hit_at_1"] = float(bool(set(predicted_list[:1]) & gold_set))
+        output["misconception_hit_at_3"] = float(bool(set(predicted_list[:3]) & gold_set))
+    else:
+        output["misconception_hit_at_1"] = None
+        output["misconception_hit_at_3"] = None
+    return output

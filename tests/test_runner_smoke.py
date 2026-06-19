@@ -99,7 +99,10 @@ def test_llm_client_uses_default_yaml_endpoints_and_generation_config() -> None:
     assert client.config.temperature == 0.2
     assert client.config.top_p == 0.8
     assert client.config.top_k == 20
-    assert client.config.max_tokens == 768
+    assert client.config.max_tokens == 2048
+    assert client.config.agent_max_tokens["solver"] == 2048
+    assert client.config.agent_max_tokens["final_tutor"] == 384
+    assert client.config.thinking_agents == ["solver"]
     assert client.config.timeout_s == 120
     assert client.config.retries == 1
     assert [endpoint.base_url for endpoint in client._endpoints] == [

@@ -96,6 +96,8 @@ def compute_record_metrics(
             "misconception_fn": 0,
             "misconception_coverage": 0.0,
             "misconception_reason": "parse_failed",
+            "misconception_hit_at_1": None,
+            "misconception_hit_at_3": None,
         }
 
     output = {
@@ -233,8 +235,14 @@ def _aggregate_group(dataset: str, method: str, rows: list[dict[str, Any]]) -> d
         "solver_correctness_mean": _mean_present(rows, "solver_correctness"),
         "internal_correctness_mean": _mean_present(rows, "internal_correctness"),
         "misconception_f1_mean": _mean_present(rows, "misconception_f1"),
+        "misconception_hit_at_1_mean": _mean_present(rows, "misconception_hit_at_1"),
+        "misconception_hit_at_3_mean": _mean_present(rows, "misconception_hit_at_3"),
         "routing_f1_mean": _mean_present(rows, "routing_f1"),
         "routing_metric_role": "diagnostic",
+        # Solver/internal correctness share the SAME solver across all methods, so
+        # they are a controlled capability variable, not a method differentiator.
+        "solver_correctness_role": "controlled_variable",
+        "internal_correctness_role": "controlled_variable",
         "state_conflict_rate_mean": _mean_present(rows, "state_conflict_rate"),
         "unsafe_commit_rate_mean": _mean_present(rows, "unsafe_commit_rate"),
         "tentative_when_conflict_rate_mean": _mean_present(rows, "tentative_when_conflict_rate"),

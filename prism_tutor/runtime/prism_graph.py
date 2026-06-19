@@ -106,6 +106,9 @@ class PrismGraph:
             selected = self._without_final_tutor(selected)
         graph_state.selected_agents.extend(selected)
         self._run_agents(graph_state, selected)
+        # state.rounds is the 0-based budget-loop counter (kept 0-based so the
+        # budget cap / termination_reason stay correct); the reported deliberation
+        # round count is 1 (initial pass) + state.rounds, set in the runner.
 
         if self.method in {"M2", "M3"} and not self._module_disabled("budget_controller"):
             while self.budget.should_continue(graph_state):

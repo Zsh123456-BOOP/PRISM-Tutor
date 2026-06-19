@@ -32,7 +32,13 @@ generation:
   temperature: 0.2
   top_p: 0.8
   top_k: 20
+  # Only the solver runs in thinking mode (it must actually reason through
+  # multi-step problems so internal correctness is not a floor for everyone);
+  # all other agents stay non-thinking for cost/clean output. The solver also
+  # gets a larger token budget to fit a reasoning trace plus the final answer.
+  thinking_agents: [solver]
   max_tokens:
+    solver: 2048
     agent_internal: 768
     final_response: 384
     verifier: 512

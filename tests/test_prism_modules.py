@@ -426,6 +426,41 @@ def test_prism_graph_can_bypass_qos_router_for_ablation():
     assert "state_manager" in result.selected_agents
 
 
+def test_misconception_routed_on_student_answer_without_confusion_words():
+    # Misconception-Benchmark style: a terse wrong answer, no "I think / confused"
+    # words. The diagnosis agents must still be routed (this is what was missing).
+    answered = TutorGraphState(
+        sample={"sample_id": "mmb1", "problem_text": "What is 1/2 + 1/3?", "student_utterance": "2/5"},
+        method="M1",
+    )
+    selected = set(QoSRouter().select_agents(estimate_risk(answered)))
+    assert "misconception" in selected
+    assert "pedagogy" in selected
+
+    # With no student answer there is nothing to diagnose -> agents not forced.
+    unanswered = TutorGraphState(
+        sample={"sample_id": "q1", "problem_text": "What is 1/2 + 1/3?"},
+        method="M1",
+    )
+    assert "misconception" not in set(QoSRouter().select_agents(estimate_risk(unanswered)))
+
+
+def test_prism_rounds_reflect_actual_deliberation_not_nominal():
+    from prism_tutor.experiments.method_registry import default_method_registry
+    from prism_tutor.experiments.runner import _run_live_prism
+    from prism_tutor.utils.config import load_config
+
+    method = default_method_registry().get("ours_full")  # nominal method.rounds == 3
+    result = _run_live_prism(
+        {"sample_id": "s1", "question": "What is 1+1?", "dataset": "mathdial", "split": "test"},
+        method,
+        BaseLLMClient(),  # mock verifier approves -> no extra deliberation rounds
+        load_config(),
+    )
+    # Was pinned to the nominal 3 before the fix; now reflects 1 initial pass.
+    assert result["rounds"] == 1
+
+
 def test_budget_rounds_are_risk_conditioned():
     from prism_tutor.runtime.budget_controller import BudgetConfig, BudgetController
 

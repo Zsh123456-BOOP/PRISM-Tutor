@@ -46,6 +46,8 @@ class LLMClientConfig(BaseModel):
     top_p: float = Field(default=0.9, ge=0, le=1)
     top_k: int = Field(default=20, ge=0)
     max_tokens: int = Field(default=1024, ge=1)
+    agent_max_tokens: dict[str, int] = Field(default_factory=dict)
+    thinking_agents: list[str] = Field(default_factory=list)
     timeout_s: float = Field(default=30.0, gt=0)
     retries: int = Field(default=0, ge=0)
     mock_mode: bool = True
@@ -74,15 +76,26 @@ class BaseLLMClient:
     def _next_endpoint(self) -> LLMEndpointConfig:
         return next(self._endpoint_cycle)
 
-    def build_payload(self, messages: list[dict[str, str]], *, model_name: str | None = None) -> dict[str, Any]:
+    def build_payload(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        model_name: str | None = None,
+        agent_name: str | None = None,
+    ) -> dict[str, Any]:
+        max_tokens = self.config.agent_max_tokens.get(agent_name or "", self.config.max_tokens)
+        # Thinking is enabled only for explicitly listed agents (the solver, so it
+        # can actually reason through multi-step problems); all other agents stay
+        # non-thinking to control cost and keep outputs clean.
+        enable_thinking = bool(agent_name and agent_name in self.config.thinking_agents)
         return {
             "model": model_name or self.config.model_name,
             "messages": messages,
             "temperature": self.config.temperature,
             "top_p": self.config.top_p,
             "top_k": self.config.top_k,
-            "max_tokens": self.config.max_tokens,
-            "chat_template_kwargs": {"enable_thinking": False},
+            "max_tokens": max_tokens,
+            "chat_template_kwargs": {"enable_thinking": enable_thinking},
         }
 
     @staticmethod
@@ -103,7 +116,7 @@ class BaseLLMClient:
         endpoint = self._next_endpoint()
         endpoint_url = endpoint.base_url
         payload_model = endpoint.model or self.config.model_name
-        payload = self.build_payload(messages, model_name=payload_model)
+        payload = self.build_payload(messages, model_name=payload_model, agent_name=agent_name)
         started = time.perf_counter()
         raw_completion = ""
         served_model_name = payload_model

@@ -193,6 +193,25 @@ def _max_tokens_from_config(config: dict[str, Any]) -> int:
     return int(value)
 
 
+def _agent_token_map(config: dict[str, Any]) -> dict[str, int]:
+    """Per-agent generation budgets. The solver gets the largest budget (it must
+    actually reason through multi-step problems); the student-facing final tutor
+    stays small to keep responses terse."""
+    max_tokens = config.get("generation", {}).get("max_tokens", {})
+    if not isinstance(max_tokens, dict):
+        return {}
+    agent_internal = int(max_tokens.get("agent_internal", 768))
+    return {
+        "solver": int(max_tokens.get("solver", agent_internal * 2)),
+        "misconception": agent_internal,
+        "pedagogy": agent_internal,
+        "hint": agent_internal,
+        "state_manager": agent_internal,
+        "verifier": int(max_tokens.get("verifier", 512)),
+        "final_tutor": int(max_tokens.get("final_response", 384)),
+    }
+
+
 def _prism_graph_config_from_run_config(config: dict[str, Any], method: MethodSpec) -> PrismGraphConfig:
     thresholds = config.get("thresholds", {})
     budget = config.get("budget", {})
@@ -280,6 +299,8 @@ def _llm_client_from_config(config: dict[str, Any]) -> BaseLLMClient:
             top_p=float(generation.get("top_p", 0.9)),
             top_k=int(generation.get("top_k", 20)),
             max_tokens=_max_tokens_from_config(config),
+            agent_max_tokens=_agent_token_map(config),
+            thinking_agents=[str(agent) for agent in generation.get("thinking_agents", ["solver"])],
             timeout_s=float(generation.get("timeout_seconds", 120)),
             retries=int(generation.get("retries", 0)),
             mock_mode=False,
@@ -320,7 +341,9 @@ def _callable_agent_name(selected_agent: str) -> str | None:
     return AGENT_ALIASES.get(selected_agent, selected_agent)
 
 
-def _state_to_method_result(state: TutorGraphState, *, method: MethodSpec) -> dict[str, Any]:
+def _state_to_method_result(
+    state: TutorGraphState, *, method: MethodSpec, rounds_override: int | None = None
+) -> dict[str, Any]:
     calls = state.llm_calls
     final_call = next((call for call in reversed(calls) if call.get("agent_name") == "final_tutor"), None)
     raw_completion = str(final_call.get("raw_completion", "")) if final_call else ""
@@ -344,7 +367,10 @@ def _state_to_method_result(state: TutorGraphState, *, method: MethodSpec) -> di
     state_errors = [error.model_dump(mode="json") for error in state.errors]
     return {
         "selected_agents": state.selected_agents or list(method.selected_agents),
-        "rounds": max(method.rounds, state.rounds),
+        # PRISM passes rounds_override = 1 (initial pass) + actual budget-loop
+        # iterations; baselines fall back to their nominal method.rounds. Never the
+        # old max(method.rounds, state.rounds), which pinned M3 to its nominal 3.
+        "rounds": rounds_override if rounds_override is not None else (state.rounds or method.rounds),
         "method_variant": method.variant,
         "risk_scores": state.risk_scores,
         "messages": [
@@ -370,7 +396,7 @@ def _run_live_prism(sample: dict[str, Any], method: MethodSpec, client: BaseLLMC
     graph_method = method_map.get(_base_method_name(method), "M3")
     graph = build_prism_graph(method=graph_method, client=client, config=_prism_graph_config_from_run_config(config, method))
     state = graph.invoke(TutorGraphState(sample=build_model_input(sample), method=method.name))
-    return _state_to_method_result(state, method=method)
+    return _state_to_method_result(state, method=method, rounds_override=1 + state.rounds)
 
 
 def _run_live_baseline(sample: dict[str, Any], method: MethodSpec, client: BaseLLMClient) -> dict[str, Any]:
