@@ -27,6 +27,21 @@ from prism_tutor.data.sample_view import assert_no_gold_fields, build_model_inpu
 from .state_commit import CommitConfig, StateCommitter
 
 
+# Canonical execution order: the solver computes the reference solution before the
+# misconception agent diagnoses against it; the verifier runs after the producers;
+# state management and the student-facing response come last.
+AGENT_EXECUTION_ORDER = ["solver", "misconception", "pedagogy", "hint", "verifier", "state_manager", "final_tutor"]
+
+
+def order_agents(agents: list[str]) -> list[str]:
+    rank = {name: index for index, name in enumerate(AGENT_EXECUTION_ORDER)}
+    deduped: list[str] = []
+    for agent in agents:
+        if agent not in deduped:
+            deduped.append(agent)
+    return sorted(deduped, key=lambda agent: rank.get(agent, len(AGENT_EXECUTION_ORDER)))
+
+
 AGENT_REGISTRY = {
     "solver": SolverAgent(),
     "misconception": MisconceptionAgent(),
@@ -100,6 +115,7 @@ class PrismGraph:
             selected = self.router.select_agents(risk)
         if self.method == "M3" and not self._module_disabled("state_commit"):
             selected = self._ensure_state_manager_for_commit(selected)
+        selected = order_agents(selected)
         defer_final_tutor = self._should_defer_final_tutor()
         needs_final_tutor = "final_tutor" in selected
         if defer_final_tutor:
@@ -112,7 +128,7 @@ class PrismGraph:
 
         if self.method in {"M2", "M3"} and not self._module_disabled("budget_controller"):
             while self.budget.should_continue(graph_state):
-                next_agents = self.budget.next_agents(graph_state)
+                next_agents = order_agents(self.budget.next_agents(graph_state))
                 if not next_agents:
                     break
                 if defer_final_tutor:

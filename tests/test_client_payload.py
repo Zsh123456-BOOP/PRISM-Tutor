@@ -1,4 +1,16 @@
-from prism_tutor.agents.base_client import BaseLLMClient, LLMClientConfig
+from prism_tutor.agents.base_client import BaseLLMClient, LLMClientConfig, _salvage_solver_output
+
+
+def test_salvage_solver_output_recovers_answer_from_truncated_reasoning():
+    # Thinking trace truncated before the JSON -- the answer is still stated.
+    raw = "12 + 3 = 15. Since her husband gave her 5, she must have bought 10 spoons"
+    out = _salvage_solver_output(raw)
+    assert out is not None
+    assert out["answer"] == "10"
+    assert out["reasoning"]
+    assert out["confidence"] <= 0.5  # salvaged answers are flagged low-confidence
+    # nothing numeric to recover -> no salvage
+    assert _salvage_solver_output("no numeric answer here") is None
 
 
 def test_build_payload_applies_per_agent_tokens_and_thinking():

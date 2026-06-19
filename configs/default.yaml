@@ -38,7 +38,10 @@ generation:
   # gets a larger token budget to fit a reasoning trace plus the final answer.
   thinking_agents: [solver]
   max_tokens:
-    solver: 2048
+    # Solver thinks then emits JSON; 2048 truncated mid-thought on hard multi-step
+    # problems (all parse failures were the solver). 4096 lets the trace finish;
+    # a deterministic answer-salvage fallback recovers any residual truncations.
+    solver: 4096
     agent_internal: 768
     final_response: 384
     verifier: 512
@@ -62,7 +65,11 @@ thresholds:
   low_risk: 0.38
   medium_risk: 0.46
   high_risk: 0.55
-  misconception_confidence_commit: 0.70
+  # Two-phase commit was over-conservative: correct medium-confidence state
+  # updates were shunted to "tentative" and never reached committed state, so
+  # external_state_accuracy fell below naive memory. Commit at 0.55 (still gated
+  # by the verifier conflict check) so genuine updates are committed.
+  misconception_confidence_commit: 0.55
   leakage_block_threshold: 0.50
   state_conflict_block_threshold: 0.40
 

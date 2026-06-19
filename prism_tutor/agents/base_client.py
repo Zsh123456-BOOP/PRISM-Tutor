@@ -24,6 +24,32 @@ from .schemas import (
 from .types import LLMCallRecord, LLMError, LLMUsage
 
 
+def _salvage_solver_output(raw_completion: str) -> dict[str, Any] | None:
+    """Recover a SolverOutput from a solver completion whose JSON was truncated by
+    the thinking trace. The reasoning prose still states the answer (e.g. "...she
+    bought 10 spoons"), so we extract the final answer deterministically rather
+    than dropping the sample. Confidence is set low and the record is flagged
+    ``solver_answer_salvaged`` so it stays auditable. This parses the model's own
+    output -- it does not read gold and does not edit results."""
+    from prism_tutor.utils.answers import extract_final_numeric
+
+    answer = extract_final_numeric(raw_completion)
+    if answer is None:
+        return None
+    tail = (raw_completion or "").strip()[-600:]
+    candidate = {
+        "answer": str(answer),
+        "reasoning": [tail or "salvaged"],
+        "confidence": 0.4,
+        "uncertainty": 0.6,
+        "needs_more_info": False,
+    }
+    try:
+        return SolverOutput.model_validate(candidate).model_dump(mode="json")
+    except Exception:
+        return None
+
+
 class LLMEndpointConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -177,6 +203,13 @@ class BaseLLMClient:
             parsed_output = parse_result.parsed_output
             stripped_output = parse_result.stripped_output
             warnings.extend(parse_result.warnings)
+            if not parse_success and schema is SolverOutput:
+                salvaged = _salvage_solver_output(raw_completion)
+                if salvaged is not None:
+                    parsed_output = salvaged
+                    stripped_output = json.dumps(salvaged, ensure_ascii=False)
+                    parse_success = True
+                    warnings.append("solver_answer_salvaged")
             if not parse_success and error is None:
                 error = LLMError(code="parse_error", message=parse_result.error or "parse failed")
         elif raw_completion:

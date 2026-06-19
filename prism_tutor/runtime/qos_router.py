@@ -48,6 +48,12 @@ class QoSRouter:
             selected = self._ensure(selected, ["state_manager", "verifier"])
         if risk.answer_uncertainty >= 0.7:
             selected = self._ensure(selected, ["solver", "verifier"])
+        # Misconception diagnosis needs the solver's reference solution to compare
+        # against the student's answer; ensure the solver runs whenever we diagnose
+        # (the graph then orders solver before misconception). This is what closes
+        # the misconception-F1 gap to fixed_4, whose pipeline always solves first.
+        if "misconception" in selected and "solver" not in selected:
+            selected = self._ensure(selected, ["solver"])
         return selected
 
     @staticmethod

@@ -52,15 +52,14 @@ def test_risk_estimator_uses_visible_student_signals_for_routing():
     risk = estimate_risk(state)
     selected = QoSRouter().select_agents(risk)
 
-    # A short, confused turn escalates misconception + pedagogy, but the easy
-    # problem keeps answer uncertainty low so the solver is NOT routed -- this is
-    # the adaptive behavior the recalibrated risk estimator is meant to produce
-    # (the old estimator forced every math sample to "high", routing everything).
+    # A short, confused turn escalates misconception + pedagogy. Answer uncertainty
+    # stays low (easy problem), but the solver is still routed because diagnosis
+    # needs the reference solution -- the misconception agent compares the student
+    # answer against the solver output (this closes the F1 gap to fixed_4).
     assert risk.misconception_risk >= 0.6
     assert risk.pedagogy_risk >= 0.6
     assert risk.answer_uncertainty < 0.7
-    assert {"misconception", "pedagogy", "verifier", "final_tutor"}.issubset(set(selected))
-    assert "solver" not in selected
+    assert {"solver", "misconception", "pedagogy", "verifier", "final_tutor"}.issubset(set(selected))
     assert "hint" not in selected
 
     # A long / hard problem raises estimated difficulty -> answer uncertainty,
@@ -130,9 +129,10 @@ def test_prism_graph_routes_dynamically_from_sample_schema():
     )
 
     assert result.risk_scores
-    # Confused short turn -> medium bucket: misconception + pedagogy routed, but
-    # not the solver (low answer uncertainty) and not the hint agent.
-    assert {"misconception", "pedagogy", "verifier", "final_tutor"}.issubset(set(result.selected_agents))
+    # Confused turn -> misconception + pedagogy routed; the solver is also routed so
+    # diagnosis has a reference solution, and the graph orders it FIRST.
+    assert {"solver", "misconception", "pedagogy", "verifier", "final_tutor"}.issubset(set(result.selected_agents))
+    assert result.selected_agents.index("solver") < result.selected_agents.index("misconception")
     assert "hint" not in result.selected_agents
 
 

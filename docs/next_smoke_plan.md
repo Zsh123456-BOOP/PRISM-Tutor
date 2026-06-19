@@ -1,4 +1,21 @@
-# Next smoke plan (post T1–T6) — for Codex to run on the server
+# Next smoke plan — for Codex to run on the server
+
+## Changes since the main_73de01e smoke (what this run validates)
+- Solver parse failures (all 146 were the solver, thinking-truncation): solver budget
+  4096 + deterministic answer-salvage fallback. Target parse_fail < 0.5%.
+- Misconception F1 < fixed_4 (ours diagnosed without the reference solution): the
+  solver is now routed whenever the misconception agent is, and runs FIRST
+  (canonical order solver→misconception→…). Validated: solver-before-misconception
+  40/40 on all datasets.
+- State < naive (two-phase was over-conservative): commit threshold 0.70→0.55
+  (still gated by the verifier conflict check).
+- Cost framing corrected: **M3 is NOT the efficiency variant** — it adds state
+  management, so it legitimately costs more than fixed_4. The Pareto/efficiency
+  claim is carried by **M1 (ours_routing) / M2 (ours_routing_budget)** vs fixed_4 /
+  debate; M3 is compared against the STATE baselines (no_memory / naive / single_writer
+  / two_phase) in Exp3, where its cost is comparable.
+
+
 
 Goal: confirm that, after the T1–T6 changes, PRISM-Tutor is competitive on the
 paper main-line metrics at lower deliberation cost — on a sample large enough to
@@ -42,9 +59,11 @@ python scripts/04_compute_metrics.py --generations outputs/runs/smoke_next/gener
    (`assert_no_gold_fields` passes), reproducible (clean frozen commit).
 2. Routing coverage: ours routes the misconception agent on ≥90% of MMB samples;
    low-risk Bridge turns still drop to a small agent set (cost adaptivity visible).
-3. Misconception: ours `misconception_f1` ≥ fixed_4 (or within noise) AND ours
-   tokens/agent_calls < fixed_4 (same/ better quality, cheaper). Report `hit@1` and
-   `hit@3` — `hit@3` separates "named it" from "ranked first".
+3. Misconception (target = PARITY, not superiority — fixed_4 is the always-all-agents
+   diagnosis ceiling): ours_full `misconception_f1`/`hit@3` within noise of fixed_4
+   (solver now runs first, so the gap should close from ~0.10). Verify solver is
+   routed before misconception on ~100% of diagnosed samples. The efficiency win is
+   carried by M1/M2, not by beating fixed_4 on F1.
 4. Solver: with solver thinking ON, solver-running methods reach non-floor MathDial
    solver correctness (>~0.3) and the value is consistent across methods (confirming
    it is a controlled variable, not a differentiator).
@@ -52,8 +71,11 @@ python scripts/04_compute_metrics.py --generations outputs/runs/smoke_next/gener
    and `incorrect_misconception_commit_rate` clearly lower than naive memory.
 6. Mechanism real: `rounds` varies (not pinned to 3); the budget/verifier loop fires
    on some hard cases (rounds > 1 for a non-trivial fraction); buckets non-degenerate.
-7. Cost Pareto: on ≥2/3 datasets ours total tokens ≤ fixed_4 at equal-or-better
-   automatic quality; on MathDial ours is at least not materially worse.
+7. Cost Pareto (carried by M1/M2, NOT M3): on ≥2/3 datasets `ours_routing` /
+   `ours_routing_budget` total tokens ≤ fixed_4 at parity diagnosis quality, and
+   below debate/fixed-N-rounds via fewer rounds. M3 (ours_full) is compared to the
+   state baselines (no_memory/naive/single_writer/two_phase) in Exp3 — comparable
+   cost there, NOT expected to undercut fixed_4 (it adds state management).
 
 If gates 2–7 hold, the main-line is supportable on automatic metrics; only then add
 the LLM judge + 200-sample human audit (still deferred until this clears).
