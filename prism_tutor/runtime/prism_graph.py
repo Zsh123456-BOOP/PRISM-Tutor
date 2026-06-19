@@ -172,14 +172,21 @@ class PrismGraph:
 
     @staticmethod
     def _agent_context(state: TutorGraphState) -> dict[str, Any]:
+        # Pass a COMPACT context: agents need the current student state and the
+        # latest output of each prior agent (esp. the solver reference), not the
+        # full multi-round history, risk vector, routing list or token counter.
+        # This trims prompt tokens (the per-agent overhead that made ours costlier
+        # than fixed_4) without removing the signal agents actually use.
+        latest_outputs = {
+            name: outputs[-1]
+            for name, outputs in state.agent_outputs.items()
+            if isinstance(outputs, list) and outputs and name not in {"runtime_variant", "baseline_plan", "state_commit"}
+        }
         return {
             "method": state.method,
             "rounds": state.rounds,
             "student_state": state.student_state.model_dump(mode="json"),
-            "agent_outputs": state.agent_outputs,
-            "risk_scores": state.risk_scores,
-            "selected_agents": state.selected_agents,
-            "total_tokens": state.total_tokens,
+            "agent_outputs": latest_outputs,
         }
 
     def _module_disabled(self, module: str) -> bool:

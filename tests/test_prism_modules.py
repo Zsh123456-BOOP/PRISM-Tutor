@@ -138,6 +138,9 @@ def test_prism_graph_routes_dynamically_from_sample_schema():
 
 def test_state_commit_tentative_on_conflict():
     state = TutorGraphState(sample={"sample_id": "s1"}, method="M3")
+    # Prior committed state exists, so a verifier-flagged conflict is genuine and
+    # all proposed updates are held tentative.
+    state.student_state.active_misconceptions = ["place_value_error"]
     state.agent_outputs["state_manager"] = [
         {
             "proposed_updates": [
@@ -166,6 +169,48 @@ def test_state_commit_tentative_on_conflict():
     assert decision.status == "tentative"
     assert state.student_state.tentative_updates
     assert state.errors == []
+
+
+def test_state_commit_commits_on_first_turn_despite_verifier_conflict_flag():
+    # No prior committed state (turn 1) -> a verifier state-conflict flag is a false
+    # positive (nothing to conflict with), so a confident update is committed.
+    state = TutorGraphState(sample={"sample_id": "s1"}, method="M3")
+    state.agent_outputs["state_manager"] = [
+        {
+            "proposed_updates": [
+                {
+                    "field": "active_misconceptions",
+                    "operation": "add",
+                    "value": "denominator_confusion",
+                    "confidence": 0.8,
+                    "evidence": "student inverted the fraction",
+                }
+            ],
+            "conflicts": [],
+            "confidence": 0.8,
+        }
+    ]
+    state.agent_outputs["verifier"] = [
+        {"approved": False, "issues": [], "leakage_detected": False, "state_conflict_detected": True, "confidence": 0.8}
+    ]
+    decision = StateCommitter().commit(state)
+    assert decision.status == "committed"
+    assert state.student_state.active_misconceptions == ["denominator_confusion"]
+
+
+def test_candidate_misconceptions_only_reach_the_misconception_agent():
+    from prism_tutor.agents.prompts import build_agent_messages
+
+    sample = {
+        "sample_id": "m1",
+        "problem_text": "What is 1/2 + 1/3?",
+        "student_utterance": "2/5",
+        "candidate_misconceptions": ["A misconception", "B misconception"],
+    }
+    misc_prompt = build_agent_messages("misconception", sample, {})[-1]["content"]
+    solver_prompt = build_agent_messages("solver", sample, {})[-1]["content"]
+    assert "candidate_misconceptions" in misc_prompt
+    assert "candidate_misconceptions" not in solver_prompt
 
 
 def test_prism_graph_callable_runs_in_mock_mode():

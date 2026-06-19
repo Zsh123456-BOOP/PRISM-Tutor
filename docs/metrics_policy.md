@@ -9,8 +9,12 @@ Roles are emitted in the aggregate metrics so tables/figures can label them.
 - **Misconception F1** — Misconception Benchmark ONLY (fixed 55-label taxonomy,
   constrained classification). Pair with `hit@1` / `hit@3` diagnostics.
 - **External student-state correctness** — `external_state_accuracy`,
-  `incorrect_misconception_commit_rate`, `final_state_contradiction_rate`
-  (where gold student state exists). Validate matching, not yet a strong claim.
+  `incorrect_misconception_commit_rate`, `final_state_contradiction_rate`. NOTE: the
+  only dataset with gold student state is single-turn MMB, where two-phase commit
+  reduces to naive (no prior state to reconcile). So accuracy here is a PARITY claim
+  (≈ naive), and the two-phase contribution is a RELIABILITY claim — `unsafe_commit_rate`=0,
+  `commit_with_evidence`=1, lower `final_state_contradiction` — NOT accuracy superiority.
+  The multi-turn reconciliation benefit is unmeasured (no multi-turn gold state).
 
 ## Diagnostic (process / not a standalone claim)
 - `routing_f1` (`routing_metric_role = "diagnostic"`): pseudo-gold is circular.

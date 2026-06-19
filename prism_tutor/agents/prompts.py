@@ -40,6 +40,11 @@ def build_agent_messages(
 ) -> list[dict[str, str]]:
     schema = AGENT_SCHEMAS[agent_name]
     model_input = build_model_input(sample)
+    # The candidate misconception taxonomy (55 long labels) is only needed by the
+    # misconception agent for constrained classification. Injecting it into every
+    # agent's prompt was ~40% of per-sample tokens on the Misconception Benchmark.
+    if agent_name != "misconception":
+        model_input.pop("candidate_misconceptions", None)
     system = (
         f"{SYSTEM_PROMPTS[agent_name]}\n"
         "You must satisfy this JSON schema exactly:\n"

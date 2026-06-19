@@ -1,6 +1,21 @@
 # Next smoke plan — for Codex to run on the server
 
-## Changes since the main_73de01e smoke (what this run validates)
+## Round-3 changes (since main_bbb8aac; what THIS run validates)
+bbb8aac passed gates 1 (parse 0.08%), 3 (misconception F1 parity: ours 0.37-0.38 ≥
+fixed_4 0.34), 4 (solver ~0.75). It failed 5 (state) and 7 (cost). Root causes found
+and fixed:
+- COST: `candidate_misconceptions` (55 long labels, ~1658 tok) was injected into
+  EVERY agent prompt → ~40% of MMB tokens. Now scoped to the misconception agent
+  only; runtime_state passed to agents is trimmed to latest-output-per-agent. Expect
+  MMB tokens ~halved for ALL methods (solver prompt ~2000→~290), so ours_routing ≈
+  fixed_4 and the absolute numbers become sane.
+- STATE: the verifier flagged `state_conflict` on ~32% of single-turn MMB samples →
+  `_tentative_all` withheld ~1/3 of commits → external_state < naive. A conflict with
+  EMPTY prior state is a false positive; commit now proceeds by confidence on turn 1
+  (the two-phase conflict gate only applies when prior state exists). Expect ours MMB
+  external_state ≈ naive (parity), keeping the commit-safety properties.
+
+## Changes since the main_73de01e smoke
 - Solver parse failures (all 146 were the solver, thinking-truncation): solver budget
   4096 + deterministic answer-salvage fallback. Target parse_fail < 0.5%.
 - Misconception F1 < fixed_4 (ours diagnosed without the reference solution): the
@@ -67,8 +82,13 @@ python scripts/04_compute_metrics.py --generations outputs/runs/smoke_next/gener
 4. Solver: with solver thinking ON, solver-running methods reach non-floor MathDial
    solver correctness (>~0.3) and the value is consistent across methods (confirming
    it is a controlled variable, not a differentiator).
-5. State: ours `external_state_accuracy` ≥ state-bearing baselines (two_phase / naive)
-   and `incorrect_misconception_commit_rate` clearly lower than naive memory.
+5. State (reframed — the ONLY gold student-state data is single-turn MMB, where
+   two-phase commit ≈ naive by design; the multi-turn reconciliation advantage has
+   no gold-state dataset to measure on): target ours `external_state_accuracy` ≈
+   naive (parity, no longer below it after the turn-1 commit fix), WITH the commit
+   safety the baselines lack — `unsafe_commit_rate` = 0, `commit_with_evidence` = 1,
+   and `final_state_contradiction` ≤ naive. State is a reliability claim, not an
+   accuracy-superiority claim; frame it as such in the paper.
 6. Mechanism real: `rounds` varies (not pinned to 3); the budget/verifier loop fires
    on some hard cases (rounds > 1 for a non-trivial fraction); buckets non-degenerate.
 7. Cost Pareto (carried by M1/M2, NOT M3): on ≥2/3 datasets `ours_routing` /

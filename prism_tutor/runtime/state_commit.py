@@ -36,7 +36,12 @@ class StateCommitter:
             return CommitDecision(status="no_updates")
         verifier_outputs = state.agent_outputs.get("verifier") or []
         verifier = verifier_outputs[-1] if verifier_outputs else {}
-        if verifier.get("state_conflict_detected"):
+        # Two-phase commit reconciles new evidence against PRIOR committed state, so
+        # a verifier "state conflict" only blocks a commit when prior state exists.
+        # On a first turn (empty state) there is nothing to conflict with -- the old
+        # code tentatived these (~1/3 of single-turn samples), withholding correct
+        # updates and dropping external_state_accuracy below naive memory.
+        if verifier.get("state_conflict_detected") and self._has_prior_state(state.student_state):
             return self._tentative_all(state, "verifier_state_conflict")
 
         state.state_before.append(state.student_state.model_dump(mode="json"))
@@ -70,6 +75,15 @@ class StateCommitter:
             decision.committed_updates.append(deepcopy(update))
         state.state_after.append(state.student_state.model_dump(mode="json"))
         return decision
+
+    @staticmethod
+    def _has_prior_state(student_state: StudentState) -> bool:
+        return bool(
+            student_state.active_misconceptions
+            or student_state.weak_skills
+            or student_state.recent_failures
+            or student_state.preferred_feedback
+        )
 
     def _tentative_all(self, state: TutorGraphState, reason: str) -> CommitDecision:
         latest = (state.agent_outputs.get("state_manager") or [{}])[-1]
