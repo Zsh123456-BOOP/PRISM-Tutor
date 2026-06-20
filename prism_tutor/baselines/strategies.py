@@ -91,6 +91,25 @@ def generic_sparse_plan(sample: dict[str, Any], *, top_k: int = 3) -> BaselinePl
     return BaselinePlan(selected, {"strategy": "generic_sparse", "scores": scored, "forbidden_fields": sorted(EDUCATIONAL_RISK_FIELDS)})
 
 
+# Exp3 state-commit baselines share ONE diagnosis pipeline so the comparison is
+# purely about the COMMIT mechanism, not about whether a method diagnoses. Without
+# this the baselines ran no solver/misconception agent, trivially scoring ~0 state
+# accuracy and confounding "ours has better state" with "ours actually diagnoses".
+_STATE_DIAGNOSIS_AGENTS = ["solver", "misconception", "pedagogy", "verifier"]
+
+
+def no_memory_plan(sample: dict[str, Any]) -> BaselinePlan:
+    # Diagnoses like the others but never persists student state (the lower bound).
+    return BaselinePlan([*_STATE_DIAGNOSIS_AGENTS, "final_tutor"], {"strategy": "no_memory"})
+
+
+def _state_commit_plan(strategy: str):
+    def planner(sample: dict[str, Any]) -> BaselinePlan:
+        return BaselinePlan([*_STATE_DIAGNOSIS_AGENTS, "state_manager", "final_tutor"], {"strategy": strategy})
+
+    return planner
+
+
 def random_routing_plan(sample: dict[str, Any]) -> BaselinePlan:
     """Routing baseline that selects a random agent subset (seeded by sample id for
     reproducibility). This is the negative control for Exp1: it isolates whether
@@ -173,10 +192,10 @@ def plan_baseline_agents(
         "fixed_3_rounds": lambda sample: BaselinePlan(["hint", "verifier", "pedagogy", "final_tutor"], {"strategy": "fixed_3_rounds"}),
         "fixed_4_rounds": fixed_4_full_plan,
         "generic_early_stopping": generic_sparse_plan,
-        "no_memory": single_tutor_plan,
-        "naive_shared_memory": lambda sample: BaselinePlan(["state_manager", "final_tutor"], {"strategy": "naive_shared_memory"}),
-        "single_writer": lambda sample: BaselinePlan(["state_manager", "final_tutor"], {"strategy": "single_writer"}),
-        "two_phase_commit": lambda sample: BaselinePlan(["state_manager", "verifier", "final_tutor"], {"strategy": "two_phase_commit"}),
+        "no_memory": no_memory_plan,
+        "naive_shared_memory": _state_commit_plan("naive_shared_memory"),
+        "single_writer": _state_commit_plan("single_writer"),
+        "two_phase_commit": _state_commit_plan("two_phase_commit"),
     }
     base_method = method_name.split("__", 1)[0]
     planner = planners.get(base_method)

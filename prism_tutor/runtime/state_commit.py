@@ -85,6 +85,28 @@ class StateCommitter:
             or student_state.preferred_feedback
         )
 
+    def commit_single_writer(self, state: TutorGraphState) -> CommitDecision:
+        """Single authoritative writer: commit at most one update per field (the
+        highest-confidence proposal), with no verifier gate and no tentative tier.
+        Distinct from naive (commit everything) and from ours (verify + confidence)."""
+        state_manager_outputs = state.agent_outputs.get("state_manager") or []
+        if not state_manager_outputs:
+            return CommitDecision(status="no_updates")
+        best_per_field: dict[Any, dict[str, Any]] = {}
+        for update in state_manager_outputs[-1].get("proposed_updates", []):
+            field = update.get("field")
+            if field not in best_per_field or float(update.get("confidence", 0.0)) > float(
+                best_per_field[field].get("confidence", 0.0)
+            ):
+                best_per_field[field] = update
+        state.state_before.append(state.student_state.model_dump(mode="json"))
+        decision = CommitDecision(status="single_writer_committed")
+        for update in best_per_field.values():
+            self._apply_update(state.student_state, update)
+            decision.committed_updates.append(deepcopy(update))
+        state.state_after.append(state.student_state.model_dump(mode="json"))
+        return decision
+
     def _tentative_all(self, state: TutorGraphState, reason: str) -> CommitDecision:
         latest = (state.agent_outputs.get("state_manager") or [{}])[-1]
         updates = [deepcopy(update) for update in latest.get("proposed_updates", [])]

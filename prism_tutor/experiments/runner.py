@@ -462,8 +462,14 @@ def _apply_baseline_state_commit(state: TutorGraphState, method: MethodSpec) -> 
     base_name = _base_method_name(method)
     if base_name == "naive_shared_memory":
         decision = StateCommitter().commit_naive(state)
-    elif base_name in {"single_writer", "two_phase_commit"}:
-        decision = StateCommitter().commit(state)
+    elif base_name == "single_writer":
+        decision = StateCommitter().commit_single_writer(state)
+    elif base_name == "two_phase_commit":
+        # Two-phase VERIFY gate but no confidence weighting (commit all non-conflicting).
+        # Ours/M3 adds the confidence-weighted commit/tentative/reject tiers on top.
+        decision = StateCommitter(
+            CommitConfig(commit_confidence_threshold=0.0, tentative_confidence_threshold=0.0)
+        ).commit(state)
     else:
         return
     state.agent_outputs.setdefault("state_commit", []).append(decision.model_dump(mode="json"))

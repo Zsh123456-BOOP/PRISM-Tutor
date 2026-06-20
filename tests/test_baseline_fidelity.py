@@ -18,6 +18,26 @@ def test_random_routing_is_seeded_random_not_generic_sparse():
     assert random_routing_plan(sample).metadata["strategy"] != generic_sparse_plan(sample).metadata["strategy"]
 
 
+def test_exp3_state_baselines_share_diagnosis_pipeline():
+    reg = default_method_registry()
+    client = BaseLLMClient()  # mock
+    sample = {"sample_id": "s1", "problem_text": "1/2 + 1/3?", "student_utterance": "2/5", "dataset": "misconception", "split": "test"}
+
+    # All state baselines now run the SAME diagnosis (solver + misconception), so the
+    # Exp3 comparison is about the commit mechanism, not about whether they diagnose.
+    for m in ("no_memory", "naive_shared_memory", "single_writer", "two_phase_commit"):
+        r = _run_live_baseline(sample, reg.get(m), client)
+        agents = {c["agent_name"] for c in r["state"]["llm_calls"]}
+        assert {"solver", "misconception"}.issubset(agents), m
+
+    # no_memory diagnoses but never persists state; the others commit.
+    nm = _run_live_baseline(sample, reg.get("no_memory"), client)
+    assert "state_commit" not in nm["state"]["agent_outputs"]
+    for m in ("naive_shared_memory", "single_writer", "two_phase_commit"):
+        r = _run_live_baseline(sample, reg.get(m), client)
+        assert r["state"]["agent_outputs"].get("state_commit"), m
+
+
 def test_fixed_round_baselines_deliberate_multiple_rounds():
     reg = default_method_registry()
     client = BaseLLMClient()  # mock
