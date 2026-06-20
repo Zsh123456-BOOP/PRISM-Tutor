@@ -114,6 +114,7 @@ def main(argv: list[str] | None = None) -> int:
         "external_state_accuracy",
         "external_state_coverage",
         "incorrect_misconception_commit_rate",
+        "misconception_commit_precision",
         "final_state_contradiction",
         "noisy_state_update_rejection_accuracy",
     ]

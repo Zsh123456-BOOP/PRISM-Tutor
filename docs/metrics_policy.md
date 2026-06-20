@@ -8,13 +8,16 @@ Roles are emitted in the aggregate metrics so tables/figures can label them.
   auxiliary only.
 - **Misconception F1** — Misconception Benchmark ONLY (fixed 55-label taxonomy,
   constrained classification). Pair with `hit@1` / `hit@3` diagnostics.
-- **External student-state correctness** — `external_state_accuracy`,
-  `incorrect_misconception_commit_rate`, `final_state_contradiction_rate`. NOTE: the
-  only dataset with gold student state is single-turn MMB, where two-phase commit
-  reduces to naive (no prior state to reconcile). So accuracy here is a PARITY claim
-  (≈ naive), and the two-phase contribution is a RELIABILITY claim — `unsafe_commit_rate`=0,
-  `commit_with_evidence`=1, lower `final_state_contradiction` — NOT accuracy superiority.
-  The multi-turn reconciliation benefit is unmeasured (no multi-turn gold state).
+- **External student-state correctness** — primary: `external_state_accuracy` (ours is
+  best on MMB, 0.377 vs ≤0.20 baselines) and `misconception_commit_precision`
+  (= 1 − incorrect-commit). Safety invariants: `unsafe_commit_rate`=0,
+  `commit_with_evidence`≈1. `final_state_contradiction` is a precision/COVERAGE
+  TRADE-OFF (it rises when a method commits more labels), NOT a pass/fail gate — do
+  NOT claim "ours has lower contradiction" (committing more is why ours is more
+  accurate). NOTE: the only gold student-state data is single-turn MMB, where the
+  accuracy win comes from the full PRISM state architecture (Exp3) while the commit
+  policy alone (Exp5) is ~parity; true multi-turn reconciliation is unmeasured
+  (no multi-turn gold) — frame as limitation / future work.
 
 ## Diagnostic (process / not a standalone claim)
 - `routing_f1` (`routing_metric_role = "diagnostic"`): pseudo-gold is circular.

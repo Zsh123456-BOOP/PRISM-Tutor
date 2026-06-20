@@ -249,6 +249,7 @@ def _aggregate_group(dataset: str, method: str, rows: list[dict[str, Any]]) -> d
         "commit_with_evidence_rate_mean": _mean_present(rows, "commit_with_evidence_rate"),
         "external_state_accuracy_mean": _mean_present(rows, "external_state_accuracy"),
         "incorrect_misconception_commit_rate_mean": _mean_present(rows, "incorrect_misconception_commit_rate"),
+        "misconception_commit_precision_mean": _mean_present(rows, "misconception_commit_precision"),
         "final_state_contradiction_rate": _mean_present(rows, "final_state_contradiction"),
         "tutor_math_correctness_mean": _mean_present(rows, "tutor_math_correctness"),
         "next_turn_feedback_quality_mean": _mean_present(rows, "next_turn_feedback_quality"),

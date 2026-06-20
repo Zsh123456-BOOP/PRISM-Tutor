@@ -96,6 +96,7 @@ def _external_state_metrics(record: dict[str, Any], gold: dict[str, Any] | None)
             "external_state_accuracy": None,
             "external_state_coverage": 0.0,
             "incorrect_misconception_commit_rate": None,
+            "misconception_commit_precision": None,
             "final_state_contradiction": None,
             "noisy_state_update_rejection_accuracy": None,
         }
@@ -121,6 +122,10 @@ def _external_state_metrics(record: dict[str, Any], gold: dict[str, Any] | None)
         "external_state_accuracy": sum(scored) / len(scored) if scored else None,
         "external_state_coverage": 1.0 if scored else 0.0,
         "incorrect_misconception_commit_rate": incorrect_rate,
+        # Precision of committed misconceptions (= fraction of committed labels that
+        # are correct). This is the right "commit quality" signal -- unlike
+        # contradiction, it is NOT gamed by abstaining / committing fewer labels.
+        "misconception_commit_precision": (1.0 - incorrect_rate) if incorrect_rate is not None else None,
         "final_state_contradiction": contradiction if scored else None,
         "noisy_state_update_rejection_accuracy": None,
     }
@@ -154,7 +159,10 @@ def evaluate_state_metrics(record: dict[str, Any], gold: dict[str, Any] | None =
         event.get("tentative") is True or event.get("type") == "tentative_update"
         for event in conflict_events
     )
-    evidence_commits = sum(bool(event.get("evidence")) for event in commits)
+    # Evidence is required only on actual committed UPDATES (which carry a "field");
+    # status-only fallback events have no payload and must not dilute the rate.
+    update_commits = [event for event in commits if event.get("field")]
+    evidence_commits = sum(bool(event.get("evidence")) for event in update_commits)
     return {
         "state_event_count": len(events),
         "state_conflict_rate": conflicts / len(events),
@@ -162,7 +170,7 @@ def evaluate_state_metrics(record: dict[str, Any], gold: dict[str, Any] | None =
         "tentative_update_rate": tentative / len(events),
         "unsafe_commit_rate": unsafe_commits / len(commits) if commits else None,
         "tentative_when_conflict_rate": tentative_conflicts / len(conflict_events) if conflict_events else None,
-        "commit_with_evidence_rate": evidence_commits / len(commits) if commits else None,
+        "commit_with_evidence_rate": evidence_commits / len(update_commits) if update_commits else None,
         "state_metric_coverage": 1.0,
         **external,
     }

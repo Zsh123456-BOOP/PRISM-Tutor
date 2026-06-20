@@ -177,6 +177,42 @@ def test_misconception_hit_at_k_uses_prediction_order():
     assert row["misconception_hit_at_3"] == 1.0  # gold "A" is within the top 3
 
 
+def test_misconception_commit_precision_and_evidence():
+    candidates = ["A misconception", "B misconception", "C misconception"]
+    generations = [
+        {
+            "sample_id": "m1",
+            "dataset": "misconception",
+            "split": "test",
+            "method": "ours_full",
+            "parse_success": True,
+            "final_response": "x",
+            "state": {
+                "agent_outputs": {
+                    "state_commit": [
+                        {
+                            "status": "committed",
+                            "committed_updates": [
+                                {"field": "active_misconceptions", "operation": "add", "value": "A misconception", "confidence": 0.9, "evidence": "e1"},
+                                {"field": "active_misconceptions", "operation": "add", "value": "B misconception", "confidence": 0.8, "evidence": "e2"},
+                            ],
+                            "tentative_updates": [],
+                            "rejected_updates": [],
+                        }
+                    ]
+                },
+                "student_state": {"active_misconceptions": ["A misconception", "B misconception"]},
+            },
+        }
+    ]
+    gold = [{"sample_id": "m1", "dataset": "misconception", "misconception_label": "A misconception", "candidate_misconceptions": candidates}]
+    row = compute_auto_metrics(generations, gold)["record_metrics"][0]
+    # committed {A,B}, gold {A} -> precision 0.5, incorrect 0.5; both updates carry evidence
+    assert row["misconception_commit_precision"] == 0.5
+    assert row["incorrect_misconception_commit_rate"] == 0.5
+    assert row["commit_with_evidence_rate"] == 1.0
+
+
 def test_misconception_unrelated_prediction_scores_zero_in_candidate_space():
     candidates = ["students confuse numerator and denominator"]
     generations = [
