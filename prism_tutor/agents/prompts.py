@@ -59,6 +59,12 @@ def build_agent_messages(
             "likely labels, MOST LIKELY FIRST. Return an empty list only if none apply. Do not "
             "invent new label text."
         )
+    if agent_name == "final_tutor" and isinstance(state, dict):
+        guard = (state.get("agent_outputs") or {}).get("leakage_guard")
+        guard_entry = guard[-1] if isinstance(guard, list) and guard else guard
+        instruction = guard_entry.get("instruction") if isinstance(guard_entry, dict) else None
+        if instruction:
+            system += "\nLEAKAGE GUARD (mandatory): " + str(instruction)
     payload = {"sample": model_input, "runtime_state": state or {}}
     if error_summary:
         payload["previous_error"] = error_summary

@@ -10,7 +10,20 @@ import re
 from dataclasses import dataclass, asdict
 from typing import Any
 
+from prism_tutor.utils.answers import extract_final_numeric
+
 from .correctness import normalize_answer
+
+
+# Asserting a computed result near the gold final answer => the tutor told it
+# (MathDial's "Telling"). Used to catch leakage that exact-narrative matching
+# misses (gold answers are often full worked-solution narratives).
+_TELLING_ASSERTION_RE = re.compile(
+    r"(=|\bequals?\b|\bis\b|\bare\b|\banswer\b|\bresult\b|\bget\b|\btotal\b|答案|结果|得到|一共|"
+    r"\btherefore\b|\bthus\b|\bhence\b|\bso\b)",
+    re.I,
+)
+_ALL_NUM_RE = re.compile(r"-?\d[\d,]*\.?\d*")
 
 
 @dataclass(frozen=True)
@@ -82,6 +95,29 @@ def detect_leakage(response: Any, gold: dict[str, Any] | None = None, sample_id:
                 severity="high",
             )
         )
+
+    # Telling: the response states the gold FINAL numeric answer in an asserting
+    # context. Catches leakage that exact-narrative matching misses because gold
+    # answers are stored as full worked-solution narratives.
+    gold_num = extract_final_numeric(gold_answer)
+    if gold_num is not None:
+        for match in _ALL_NUM_RE.finditer(text):
+            token = match.group().replace(",", "").rstrip(".")
+            if token != gold_num:
+                continue
+            context = text[max(0, match.start() - 30) : match.start()]
+            if "=" in context or _TELLING_ASSERTION_RE.search(context):
+                hits.append(
+                    LeakageHit(
+                        sample_id=sample_id,
+                        rule="telling_final_answer",
+                        evidence=match.group(),
+                        start=match.start(),
+                        end=match.end(),
+                        severity="high",
+                    )
+                )
+                break
 
     for pattern in DIRECT_ANSWER_PATTERNS:
         match = pattern.search(text)

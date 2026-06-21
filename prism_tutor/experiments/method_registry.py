@@ -105,6 +105,7 @@ def default_method_registry() -> MethodRegistry:
         "ablate_misconception_risk",
         "ablate_state_conflict_risk",
         "ablate_state_commit",
+        "ablate_leakage_guard",
         "ablate_confidence_weighted_commit",
         "replace_pedagogical_risk_with_difficulty",
         "replace_two_phase_commit_with_naive_memory",

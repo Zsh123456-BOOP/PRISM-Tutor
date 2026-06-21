@@ -68,6 +68,7 @@ class PrismGraphConfig(BaseModel):
     noisy_agent_probability: float = Field(default=0.0, ge=0, le=1)
     noisy_agent_seed: int = 42
     leakage_guard_max_retries: int = Field(default=1, ge=0, le=2)
+    leakage_guard_risk_threshold: float = Field(default=0.55, ge=0, le=1)
     noisy_agent_names: list[str] = Field(
         default_factory=lambda: ["solver", "misconception", "pedagogy", "hint", "verifier", "state_manager"]
     )
@@ -150,6 +151,13 @@ class PrismGraph:
         if defer_final_tutor and needs_final_tutor:
             self._run_final_tutor_once(graph_state)
 
+        # Leakage-risk-gated guard runs for ALL methods (M1/M2/M3): it inspects the
+        # final student-facing response (using the solver's own answer, never gold)
+        # and regenerates a non-leaking response when leakage is detected or the
+        # estimated leakage risk is high. Fixed baselines never run this guard, so
+        # it is a PRISM-only module (ablate via disabled_modules=["leakage_guard"]).
+        self._apply_leakage_guard(graph_state)
+
         if graph_state.termination_reason is None:
             graph_state.termination_reason = "completed"
         return graph_state
@@ -204,25 +212,66 @@ class PrismGraph:
             return
         state.selected_agents.append("final_tutor")
         self._run_agents(state, ["final_tutor"])
-        self._retry_final_tutor_on_leakage(state)
 
-    def _retry_final_tutor_on_leakage(self, state: TutorGraphState) -> None:
+    def _apply_leakage_guard(self, state: TutorGraphState) -> None:
+        """Risk-gated leakage guard (PRISM-only; absent from fixed baselines).
+
+        Once the student-facing response exists, detect whether it reveals the
+        answer or a solution step. Detection is gold-free: it uses the solver's
+        OWN computed answer (a model output) plus structural telling patterns, and
+        becomes stricter when the estimated leakage risk is high. On a hit, a
+        mandatory guard instruction is attached and the final response is
+        regenerated (up to ``leakage_guard_max_retries`` times).
+        """
+        if self._module_disabled("leakage_guard"):
+            return
         if self.config.leakage_guard_max_retries <= 0:
             return
+        leakage_risk = self._latest_leakage_risk(state)
+        reference_answer = self._solver_answer(state)
         for retry_index in range(self.config.leakage_guard_max_retries):
             response = self._latest_final_response(state)
-            leakage = detect_runtime_leakage(response, sample_id=state.sample.get("sample_id"))
+            if not response:
+                return
+            leakage = detect_runtime_leakage(
+                response,
+                sample_id=state.sample.get("sample_id"),
+                reference_answer=reference_answer,
+                leakage_risk=leakage_risk,
+                aggressive_threshold=self.config.leakage_guard_risk_threshold,
+            )
             if not leakage["rule_leakage"]:
                 return
             state.agent_outputs.setdefault("leakage_guard", []).append(
                 {
                     "retry_index": retry_index,
                     "matched_rules": leakage["matched_rules"],
-                    "instruction": "Regenerate the final response without answer leakage or key solution steps.",
+                    "leakage_risk": leakage_risk,
+                    "instruction": (
+                        "Your previous student-facing response revealed the final answer or a "
+                        "solution step. Rewrite it as a SINGLE guiding question (or one minimal "
+                        "next-step hint) that does NOT state the final answer, the result of any "
+                        "computation, or a complete solution path. Set withheld_answer=true."
+                    ),
                 }
             )
             state.selected_agents.append("final_tutor")
             self._run_agents(state, ["final_tutor"])
+
+    def _latest_leakage_risk(self, state: TutorGraphState) -> float:
+        if state.risk_scores:
+            try:
+                return float(state.risk_scores[-1].get("leakage_risk", 0.0))
+            except (TypeError, ValueError):
+                return 0.0
+        return 0.0
+
+    @staticmethod
+    def _solver_answer(state: TutorGraphState) -> Any:
+        outputs = state.agent_outputs.get("solver") or []
+        if outputs and isinstance(outputs[-1], dict):
+            return outputs[-1].get("answer")
+        return None
 
     @staticmethod
     def _latest_final_response(state: TutorGraphState) -> str:
