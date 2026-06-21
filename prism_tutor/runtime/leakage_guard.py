@@ -52,6 +52,20 @@ STUDENT_REFERENCE_PREFIXES = [
     re.compile(r"\byour\s*$", re.I),
 ]
 
+# The tutor is echoing the student's own number (not revealing the solution), so a
+# matching number nearby is not leakage.
+STUDENT_ECHO_PATTERNS = [
+    re.compile(
+        r"\byou\s+(?:said|got|have|had|wrote|chose|selected|calculated|computed|answered|think|believe|claimed|mentioned)\b",
+        re.I,
+    ),
+    re.compile(r"\byour\s+(?:answer|result|solution|calculation|response|estimate|guess|number)\b", re.I),
+]
+
+
+def _is_student_echo(context: str) -> bool:
+    return any(pattern.search(context) for pattern in STUDENT_ECHO_PATTERNS)
+
 # A computed result is being asserted (used together with the reference answer,
 # or — in aggressive / high-leakage-risk mode — on its own).
 RESULT_ASSERTION_PATTERNS = [
@@ -108,17 +122,21 @@ def detect_runtime_leakage(
 
     # Reference-answer leakage: the response reveals the solver's own computed
     # final answer. High severity when asserted ("= 42", "is 42", "answer is 42");
-    # medium when merely present under high leakage risk.
+    # medium when merely stated (bare presence), excluding echoes of the student's
+    # own number. Bare presence fires regardless of leakage risk so the guard's
+    # sensitivity matches the offline detector (which flags bare final-answer
+    # presence); the leakage risk still gates the no-reference branch below.
     ref_num = extract_final_numeric(reference_answer) if reference_answer not in (None, "") else None
     if ref_num is not None:
         asserted = False
-        present = False
+        bare = False
         for match in _ALL_NUM_RE.finditer(text):
             token = match.group().replace(",", "").rstrip(".")
             if token != ref_num:
                 continue
-            present = True
-            context = text[max(0, match.start() - 30) : match.start()]
+            context = text[max(0, match.start() - 40) : match.start()]
+            if _is_student_echo(context):
+                continue
             if "=" in context or any(p.search(context + match.group()) for p in RESULT_ASSERTION_PATTERNS):
                 hits.append(
                     GuardHit(
@@ -132,11 +150,12 @@ def detect_runtime_leakage(
                 )
                 asserted = True
                 break
-        if present and not asserted and aggressive:
-            hits.append(GuardHit(sample_id, "runtime_reference_answer_present_high_risk", str(ref_num), 0, 0, "medium"))
+            bare = True
+        if not asserted and bare:
+            hits.append(GuardHit(sample_id, "runtime_reference_answer_present", str(ref_num), 0, 0, "medium"))
 
-    # Aggressive mode: any asserted numeric result is a telling signal even when
-    # the reference answer is unavailable.
+    # No reference answer available (e.g. solver not routed): a generic asserted
+    # numeric result is only treated as leakage under high leakage risk.
     if aggressive and not hits:
         for pattern in RESULT_ASSERTION_PATTERNS:
             match = pattern.search(text)

@@ -36,12 +36,25 @@ def test_runtime_detector_passes_guiding_question():
     assert result["rule_leakage"] is False
 
 
-def test_runtime_detector_is_risk_gated():
-    # Bare presence of the reference answer (no assertion) only fires under high
-    # leakage risk (aggressive mode).
-    text = "Remember the bus left at 42 minutes past the hour."
-    low = detect_runtime_leakage(text, reference_answer="42", leakage_risk=0.2)
-    high = detect_runtime_leakage(text, reference_answer="42", leakage_risk=0.9)
+def test_runtime_detector_flags_bare_reference_answer():
+    # Bare statement of the solver's computed answer reveals it even without an
+    # explicit assertion phrase, regardless of leakage risk.
+    result = detect_runtime_leakage("The package contained 42 spoons in total.", reference_answer="42", leakage_risk=0.1)
+    assert result["rule_leakage"] is True
+    assert "runtime_reference_answer_present" in result["matched_rules"]
+
+
+def test_runtime_detector_excludes_student_echo():
+    # Echoing the student's own number is not leakage.
+    result = detect_runtime_leakage("You said 42, but let's re-check that step together.", reference_answer="42")
+    assert result["rule_leakage"] is False
+
+
+def test_runtime_detector_noref_assertion_is_risk_gated():
+    # With no reference answer, a generic asserted result only fires under high risk.
+    text = "Therefore we get 28 at this stage."
+    low = detect_runtime_leakage(text, reference_answer=None, leakage_risk=0.2)
+    high = detect_runtime_leakage(text, reference_answer=None, leakage_risk=0.9)
     assert low["rule_leakage"] is False
     assert high["rule_leakage"] is True
 

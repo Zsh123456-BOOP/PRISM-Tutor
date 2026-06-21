@@ -67,7 +67,7 @@ class PrismGraphConfig(BaseModel):
     variant: dict[str, Any] = Field(default_factory=dict)
     noisy_agent_probability: float = Field(default=0.0, ge=0, le=1)
     noisy_agent_seed: int = 42
-    leakage_guard_max_retries: int = Field(default=1, ge=0, le=2)
+    leakage_guard_max_retries: int = Field(default=2, ge=0, le=3)
     leakage_guard_risk_threshold: float = Field(default=0.55, ge=0, le=1)
     noisy_agent_names: list[str] = Field(
         default_factory=lambda: ["solver", "misconception", "pedagogy", "hint", "verifier", "state_manager"]
