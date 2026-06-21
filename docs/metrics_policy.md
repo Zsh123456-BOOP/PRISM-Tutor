@@ -8,8 +8,13 @@ Roles are emitted in the aggregate metrics so tables/figures can label them.
   auxiliary only.
 - **Misconception F1** — Misconception Benchmark ONLY (fixed 55-label taxonomy,
   constrained classification). Pair with `hit@1` / `hit@3` diagnostics.
-- **External student-state correctness** — primary: `external_state_accuracy` (ours is
-  best on MMB, 0.377 vs ≤0.20 baselines) and `misconception_commit_precision`
+- **External student-state correctness** — primary: `external_state_accuracy` (on MMB,
+  ours_full = 0.368, significantly above the memory-strategy baselines ≤0.19 —
+  bootstrap diff CI excludes 0 — but statistically tied with the best ablation variant
+  replace_two_phase_with_naive = 0.386, diff CI [−0.07, +0.11] contains 0; so NOT
+  "highest". unsafe_commit=0 / commit_with_evidence=1.0 hold for ALL committing methods
+  on single-turn MMB, so they are not differentiators here; the two-phase commit's
+  multi-turn value is unmeasured) and `misconception_commit_precision`
   (= 1 − incorrect-commit). Safety invariants: `unsafe_commit_rate`=0,
   `commit_with_evidence`≈1. `final_state_contradiction` is a precision/COVERAGE
   TRADE-OFF (it rises when a method commits more labels), NOT a pass/fail gate — do

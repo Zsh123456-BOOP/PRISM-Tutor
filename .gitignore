@@ -40,3 +40,6 @@ references/*.pdf
 
 # Remote artifact snapshots synced for review (kept local, not tracked)
 remote_artifacts/
+
+# Writing-style reference PDFs (local; analyses are the tracked .style.md)
+writing_refs/*.pdf
