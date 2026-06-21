@@ -81,6 +81,13 @@ def detect_leakage(response: Any, gold: dict[str, Any] | None = None, sample_id:
     gold = gold or {}
 
     gold_answer = gold.get("answer") or gold.get("ground_truth") or gold.get("final_answer")
+    if not gold_answer:
+        # Several datasets (e.g. MathDial) store the gold answer under metadata,
+        # not at the top level; without this the telling/final-answer rules can
+        # never fire and leakage reads as ~0 for every method.
+        meta = gold.get("metadata")
+        if isinstance(meta, dict):
+            gold_answer = meta.get("final_answer") or meta.get("ground_truth") or meta.get("answer")
     normalized_gold = normalize_answer(gold_answer)
     normalized_text = normalize_answer(text)
     if normalized_gold and normalized_gold in normalized_text:
