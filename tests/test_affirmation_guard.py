@@ -101,3 +101,53 @@ def test_affirmation_guard_is_ablatable():
     final_calls = [c for c in result.llm_calls if c["agent_name"] == "final_tutor"]
     assert len(final_calls) == 1
     assert not result.agent_outputs.get("affirmation_guard")
+
+
+class _AffirmThenLeakThenCleanClient:
+    """The affirmation rewrite re-introduces the answer; the leakage guard must
+    catch it on the next fixpoint pass so the emitted response leaks nothing."""
+
+    def __init__(self) -> None:
+        self.final_calls = 0
+
+    def call(self, *, sample_id, method, agent_name, messages, schema):  # noqa: ANN001
+        if agent_name == "solver":
+            raw = '{"answer":"4","reasoning":["2+2=4"],"confidence":0.9,"uncertainty":0.1,"needs_more_info":false}'
+        elif agent_name == "misconception":
+            raw = '{"misconception_detected":true,"misconception_labels":["addition_error"],"evidence":["2+2 is not 5"],"severity":"high","confidence":0.9}'
+        elif agent_name == "final_tutor":
+            self.final_calls += 1
+            if self.final_calls == 1:
+                raw = '{"response":"Yes, that is correct! Great job.","withheld_answer":true,"confidence":0.8,"safety_notes":[]}'
+            elif self.final_calls == 2:
+                raw = '{"response":"The final answer is 4.","withheld_answer":false,"confidence":0.8,"safety_notes":[]}'
+            else:
+                raw = '{"response":"What do you get when you add 2 and 2?","withheld_answer":true,"confidence":0.8,"safety_notes":["regenerated"]}'
+        else:
+            raw = BaseLLMClient(LLMClientConfig(mock_mode=True))._mock_completion(agent_name, AGENT_SCHEMAS.get(agent_name))
+        parsed = parse_agent_json(raw, schema)
+        return LLMCallRecord(
+            sample_id=sample_id,
+            method=method,
+            agent_name=agent_name,
+            endpoint="mock://affirm-leak",
+            prompt=messages,
+            raw_completion=raw,
+            stripped_output=parsed.stripped_output,
+            parsed_output=parsed.parsed_output,
+            usage=LLMUsage(prompt_tokens=1, completion_tokens=1, total_tokens=2, source="mock"),
+            parse_success=parsed.parse_success,
+        )
+
+
+def test_guards_reach_fixpoint_affirmation_rewrite_not_left_leaking():
+    client = _AffirmThenLeakThenCleanClient()
+    graph = build_prism_graph("M1", client=client)
+    result = graph.invoke({"sample": dict(_SAMPLE), "method": "M1"})
+    final_calls = [c for c in result.llm_calls if c["agent_name"] == "final_tutor"]
+    final = str(final_calls[-1]["parsed_output"]["response"])
+    # the emitted response must satisfy BOTH guards: no affirmation AND no leaked answer
+    assert detect_false_affirmation(final) is False
+    assert "the final answer is 4" not in final.lower()
+    assert result.agent_outputs.get("affirmation_guard")
+    assert result.agent_outputs.get("leakage_guard")

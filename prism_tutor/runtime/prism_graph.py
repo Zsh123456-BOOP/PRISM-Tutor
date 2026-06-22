@@ -158,10 +158,16 @@ class PrismGraph:
         # and regenerates a non-leaking response when leakage is detected or the
         # estimated leakage risk is high. Fixed baselines never run this guard, so
         # it is a PRISM-only module (ablate via disabled_modules=["leakage_guard"]).
-        self._apply_leakage_guard(graph_state)
-        # Pedagogical-integrity guard #2: do not affirm an answer the system's own
-        # diagnosis judged wrong. PRISM-only, ablatable via "affirmation_guard".
-        self._apply_affirmation_guard(graph_state)
+        # Pedagogical-integrity guards (leakage + false-affirmation) share the final
+        # response, so a later guard's regeneration can violate an earlier guard's
+        # invariant (e.g. an affirmation rewrite re-introducing the answer). Re-apply
+        # both to a fixpoint (capped) so the emitted response satisfies all guards.
+        for _ in range(2):
+            before = self._latest_final_response(graph_state)
+            self._apply_leakage_guard(graph_state)
+            self._apply_affirmation_guard(graph_state)
+            if self._latest_final_response(graph_state) == before:
+                break
 
         if graph_state.termination_reason is None:
             graph_state.termination_reason = "completed"
