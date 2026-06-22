@@ -10,6 +10,7 @@ from .correctness import evaluate_solver_correctness
 from .generation_records import deduplicate_generation_rows
 from .judge_records import deduplicate_judge_rows, judge_row_is_valid
 from .judge_merge import merge_leakage
+from .affirmation_metrics import detect_over_validation
 from .leakage_detector import detect_leakage
 from .misconception_metrics import evaluate_misconceptions
 from .routing_metrics import evaluate_routing
@@ -68,6 +69,7 @@ def compute_record_metrics(
         rounds = len(rounds)
     final_response = record.get("final_response") or record.get("response") or ""
     leakage = detect_leakage(final_response, gold=gold, sample_id=record.get("sample_id"))
+    affirmation = detect_over_validation(final_response, gold=gold)
     parsed_success = record.get("parse_success")
     if parsed_success is None:
         parsed_success = record.get("error") in (None, "")
@@ -119,6 +121,8 @@ def compute_record_metrics(
         "rule_leakage": leakage["rule_leakage"],
         "leakage_matched_rules": "|".join(leakage["matched_rules"]),
         "leakage_hit_count": len(leakage["hits"]),
+        "student_wrong": affirmation["student_wrong"],
+        "over_validation": affirmation["over_validation"],
     }
     if _valid_judge_row(judge_row):
         merged = merge_leakage(output, judge_row)
@@ -258,6 +262,10 @@ def _aggregate_group(dataset: str, method: str, rows: list[dict[str, Any]]) -> d
         "judge_leakage_rate": _mean_present(rows, "judge_leakage"),
         "final_leakage_rate": _mean_present(rows, "final_leakage"),
         "leakage_conflict_rate": _mean_present(rows, "leakage_conflict"),
+        # Over-validation rate = fraction of WRONG-student cases the tutor affirms
+        # as correct (over_validation is None for non-wrong cases -> excluded).
+        "over_validation_rate": _mean_present(rows, "over_validation"),
+        "over_validation_coverage": _coverage(rows, "over_validation"),
         "solver_correctness_coverage": _coverage(rows, "solver_correctness"),
         "internal_correctness_coverage": _coverage(rows, "internal_correctness"),
         "misconception_coverage": _coverage(rows, "misconception_f1"),

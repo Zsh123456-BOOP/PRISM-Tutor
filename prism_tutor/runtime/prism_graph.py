@@ -20,6 +20,7 @@ from prism_tutor.agents.verifier import VerifierAgent
 
 from .budget_controller import BudgetConfig, BudgetController
 from .graph_state import TutorGraphState
+from .affirmation_guard import detect_false_affirmation, student_answer_disagrees_with_solver
 from .leakage_guard import detect_runtime_leakage
 from .qos_router import QoSRouter, RouterConfig
 from .risk_estimator import RiskConfig, estimate_risk
@@ -69,6 +70,7 @@ class PrismGraphConfig(BaseModel):
     noisy_agent_seed: int = 42
     leakage_guard_max_retries: int = Field(default=2, ge=0, le=3)
     leakage_guard_risk_threshold: float = Field(default=0.55, ge=0, le=1)
+    affirmation_guard_max_retries: int = Field(default=1, ge=0, le=3)
     noisy_agent_names: list[str] = Field(
         default_factory=lambda: ["solver", "misconception", "pedagogy", "hint", "verifier", "state_manager"]
     )
@@ -157,6 +159,9 @@ class PrismGraph:
         # estimated leakage risk is high. Fixed baselines never run this guard, so
         # it is a PRISM-only module (ablate via disabled_modules=["leakage_guard"]).
         self._apply_leakage_guard(graph_state)
+        # Pedagogical-integrity guard #2: do not affirm an answer the system's own
+        # diagnosis judged wrong. PRISM-only, ablatable via "affirmation_guard".
+        self._apply_affirmation_guard(graph_state)
 
         if graph_state.termination_reason is None:
             graph_state.termination_reason = "completed"
@@ -276,6 +281,53 @@ class PrismGraph:
         if outputs and isinstance(outputs[-1], dict):
             return outputs[-1].get("answer")
         return None
+
+    def _apply_affirmation_guard(self, state: TutorGraphState) -> None:
+        """Block false affirmation: if the system's own diagnosis judged the
+        student wrong but the response affirms them as correct, regenerate a
+        non-affirming, corrective-but-non-revealing response. Gold-free."""
+        if self._module_disabled("affirmation_guard"):
+            return
+        if self.config.affirmation_guard_max_retries <= 0:
+            return
+        if not self._student_likely_wrong(state):
+            return
+        for attempt in range(self.config.affirmation_guard_max_retries):
+            response = self._latest_final_response(state)
+            if not response:
+                return
+            if not detect_false_affirmation(response):
+                return
+            state.agent_outputs.setdefault("affirmation_guard", []).append(
+                {
+                    "attempt": attempt,
+                    "instruction": (
+                        "Your previous response affirmed the student's work as correct, but the "
+                        "diagnosis indicates it is INCORRECT. Do NOT affirm it. Acknowledge the "
+                        "effort, indicate there is an error to revisit, and ask ONE guiding question "
+                        "that helps the student find the mistake -- without revealing the final answer."
+                    ),
+                }
+            )
+            state.selected_agents.append("final_tutor")
+            self._run_agents(state, ["final_tutor"])
+
+    def _student_likely_wrong(self, state: TutorGraphState) -> bool:
+        misconception = state.agent_outputs.get("misconception") or []
+        if misconception and isinstance(misconception[-1], dict):
+            if misconception[-1].get("misconception_detected") is True:
+                return True
+        verifier = state.agent_outputs.get("verifier") or []
+        if verifier and isinstance(verifier[-1], dict):
+            for issue in verifier[-1].get("issues", []) or []:
+                if isinstance(issue, dict) and issue.get("issue_type") == "incorrect_answer":
+                    return True
+        student = (
+            state.sample.get("student_utterance")
+            or state.sample.get("student_answer")
+            or state.sample.get("student_solution")
+        )
+        return student_answer_disagrees_with_solver(student, self._solver_answer(state))
 
     @staticmethod
     def _latest_final_response(state: TutorGraphState) -> str:

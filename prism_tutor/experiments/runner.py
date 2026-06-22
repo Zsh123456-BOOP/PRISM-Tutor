@@ -263,6 +263,8 @@ def _prism_graph_config_from_run_config(config: dict[str, Any], method: MethodSp
         graph_config.disabled_modules.append("state_commit")
     elif ablation == "ablate_leakage_guard":
         graph_config.disabled_modules.append("leakage_guard")
+    elif ablation == "ablate_affirmation_guard":
+        graph_config.disabled_modules.append("affirmation_guard")
     elif ablation == "ablate_leakage_risk":
         graph_config.disabled_risks.append("leakage_risk")
     elif ablation == "ablate_misconception_risk":

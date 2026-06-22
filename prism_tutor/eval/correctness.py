@@ -92,12 +92,3 @@ def evaluate_solver_correctness(record: dict[str, Any], gold: dict[str, Any]) ->
         "internal_correctness_coverage": 1.0,
         "internal_correctness_reason": "solver_correctness_alias",
     }
-
-
-def evaluate_internal_correctness(record: dict[str, Any], gold: dict[str, Any]) -> dict[str, Any]:
-    """Backward-compatible alias for solver correctness.
-
-    Final tutor responses are scaffolded and should not be exact-matched
-    against the gold answer.
-    """
-    return evaluate_solver_correctness(record, gold)
