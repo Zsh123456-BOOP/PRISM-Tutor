@@ -56,6 +56,9 @@ GOLD_FIELDS = {
     "teacher_intention",
     "teacher_response",
     "tutor_response",
+    "gold_teacher_move",
+    "gold_is_telling",
+    "gold_turn_type",
 }
 
 SAFE_METADATA_FIELDS = {

@@ -76,9 +76,46 @@ def _visible_text(sample: dict[str, Any]) -> str:
     return " ".join(parts).lower()
 
 
+_AGREEMENT_TOKENS = (
+    "thank", "thanks", "i see", "got it", "i get it", "makes sense", "make sense",
+    "understand", "understood", "ok", "okay", "yes", "yeah", "yep", "right",
+    "sure", "great", "cool", "alright", "all right", "that helps", "perfect",
+)
+
+
+_CONFUSION_MARKERS = (
+    "not sure", "unsure", "confused", "don't", "do not", "dont", "how", "why",
+    "what", "stuck", "lost", "help", "no idea", "can't", "cannot", "where",
+)
+
+
+def _is_low_stakes_turn(utterance: str) -> bool:
+    """Infer (from the visible student turn only) whether this is a low-stakes turn
+    -- a short social / acknowledgement turn with no fresh attempt, question, or
+    computation. Such turns need no diagnosis, so the router can route a minimal
+    agent set. Attempt / question / computation / confusion turns are NOT
+    low-stakes (we bias toward diagnosis: a false negative only forgoes a saving,
+    a false positive would skip needed diagnosis)."""
+    text = (utterance or "").strip().lower()
+    if not text:
+        return False
+    if "?" in text or any(char.isdigit() for char in text) or "=" in text:
+        return False
+    if any(marker in text for marker in _CONFUSION_MARKERS):
+        return False
+    words = text.split()
+    if any(token in text for token in _AGREEMENT_TOKENS) and len(words) <= 14:
+        return True
+    return len(words) <= 5
+
+
 def _sample_signals(sample: dict[str, Any]) -> dict[str, bool]:
     text = _visible_text(sample)
     has_student_work = _has_any(sample, ("student_utterance", "student_answer", "student_solution"))
+    current_utterance = str(
+        sample.get("student_utterance") or sample.get("student_answer") or sample.get("student_solution") or ""
+    )
+    low_stakes = has_student_work and _is_low_stakes_turn(current_utterance)
     math_like = any(char.isdigit() for char in text) or any(
         marker in text
         for marker in (
@@ -111,9 +148,10 @@ def _sample_signals(sample: dict[str, Any]) -> dict[str, bool]:
     )
     dialogue_like = _has_any(sample, ("dialogue", "dialogue_text", "dialogue_history", "dialogue_turns"))
     return {
-        "needs_solver": math_like,
+        "needs_solver": math_like and not low_stakes,
         "confusion": confusion_like,
         "has_student_work": has_student_work,
+        "low_stakes": low_stakes,
         "dialogue_like": dialogue_like,
         "known_leakage": False,
     }
@@ -158,7 +196,12 @@ def estimate_risk(state: TutorGraphState, config: RiskConfig | None = None) -> R
     # and where confusion keywords are usually absent). Kept at a medium level so
     # it triggers routing (router threshold 0.45) WITHOUT forcing the deliberation
     # bucket to high; ablate_misconception_risk still zeroes this downstream.
-    if signals["has_student_work"]:
+    # The structural diagnosis floor applies only when there is an actual attempt
+    # to diagnose -- NOT on low-stakes turns (short social / acknowledgement turns
+    # like "I see, thanks"), which need no diagnosis. This is what lets the router
+    # route a minimal agent set on the ~24% low-stakes turns of a full dialogue
+    # (single-turn error datasets are never low-stakes, so they are unaffected).
+    if signals["has_student_work"] and not signals["low_stakes"]:
         misconception_risk = max(misconception_risk, 0.5)
 
     # Pedagogy risk: graded by difficulty; escalated for dialogue / confused turns
@@ -166,7 +209,7 @@ def estimate_risk(state: TutorGraphState, config: RiskConfig | None = None) -> R
     pedagogy_risk = 0.3 + 0.3 * difficulty
     if signals["dialogue_like"] or signals["confusion"]:
         pedagogy_risk = max(pedagogy_risk, 0.6)
-    if signals["has_student_work"]:
+    if signals["has_student_work"] and not signals["low_stakes"]:
         pedagogy_risk = max(pedagogy_risk, 0.5)
     leakage_risk = float(hint.get("answer_leakage_risk", 0.15))
     if signals["known_leakage"]:
@@ -188,6 +231,14 @@ def estimate_risk(state: TutorGraphState, config: RiskConfig | None = None) -> R
         leakage_risk = max(leakage_risk, 0.8)
     if verifier.get("state_conflict_detected") or state.student_state.tentative_updates:
         state_conflict_risk = max(state_conflict_risk, 0.7)
+
+    # Low-stakes turn: a short social / acknowledgement turn needs no diagnosis, so
+    # keep the diagnosis-related risks low (this puts the turn in the low bucket and
+    # routes a minimal agent set). Leakage / state risks are left untouched.
+    if signals["low_stakes"] and not (misconception.get("misconception_detected") or verifier.get("issues")):
+        answer_uncertainty = min(answer_uncertainty, 0.15)
+        misconception_risk = min(misconception_risk, 0.15)
+        pedagogy_risk = min(pedagogy_risk, 0.25)
 
     values = {
         "answer_uncertainty": max(0.0, min(1.0, answer_uncertainty)),
