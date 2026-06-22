@@ -88,9 +88,26 @@ def detect_leakage(response: Any, gold: dict[str, Any] | None = None, sample_id:
         meta = gold.get("metadata")
         if isinstance(meta, dict):
             gold_answer = meta.get("final_answer") or meta.get("ground_truth") or meta.get("answer")
+
+    # If the gold answer's number ALSO appears in the problem statement, a matching
+    # number in the response cannot be distinguished from quoting the problem, so
+    # the number-based rules (final_answer_match / telling) are unreliable and are
+    # suppressed for this sample (avoids false positives when the answer happens to
+    # equal a given quantity, e.g. answer "3" vs a "$3" price). Phrase / solution-
+    # chain / key-step rules still apply.
+    gold_num = extract_final_numeric(gold_answer)
+    meta = gold.get("metadata") if isinstance(gold.get("metadata"), dict) else {}
+    problem_text = " ".join(
+        str(gold.get(key) or "") for key in ("problem_text", "problem", "question")
+    ) + " " + " ".join(str(meta.get(key) or "") for key in ("problem", "question", "problem_text"))
+    gold_num_in_problem = bool(
+        gold_num is not None
+        and gold_num in {m.group().replace(",", "").rstrip(".") for m in _ALL_NUM_RE.finditer(problem_text)}
+    )
+
     normalized_gold = normalize_answer(gold_answer)
     normalized_text = normalize_answer(text)
-    if normalized_gold and normalized_gold in normalized_text:
+    if normalized_gold and normalized_gold in normalized_text and not gold_num_in_problem:
         start = normalized_text.find(normalized_gold)
         hits.append(
             LeakageHit(
@@ -106,8 +123,7 @@ def detect_leakage(response: Any, gold: dict[str, Any] | None = None, sample_id:
     # Telling: the response states the gold FINAL numeric answer in an asserting
     # context. Catches leakage that exact-narrative matching misses because gold
     # answers are stored as full worked-solution narratives.
-    gold_num = extract_final_numeric(gold_answer)
-    if gold_num is not None:
+    if gold_num is not None and not gold_num_in_problem:
         for match in _ALL_NUM_RE.finditer(text):
             token = match.group().replace(",", "").rstrip(".")
             if token != gold_num:

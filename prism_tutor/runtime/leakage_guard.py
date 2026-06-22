@@ -94,6 +94,7 @@ def detect_runtime_leakage(
     reference_answer: Any = None,
     leakage_risk: float | None = None,
     aggressive_threshold: float = 0.55,
+    problem_text: str = "",
 ) -> dict[str, Any]:
     """Detect leakage in a student-facing response (gold-free).
 
@@ -127,6 +128,13 @@ def detect_runtime_leakage(
     # sensitivity matches the offline detector (which flags bare final-answer
     # presence); the leakage risk still gates the no-reference branch below.
     ref_num = extract_final_numeric(reference_answer) if reference_answer not in (None, "") else None
+    if ref_num is not None and problem_text:
+        # If the solver's answer also appears in the problem, a matching number in
+        # the response can't be told apart from quoting the problem -> skip the
+        # number-based reference rules for this sample.
+        prob_nums = {m.group().replace(",", "").rstrip(".") for m in _ALL_NUM_RE.finditer(str(problem_text))}
+        if ref_num in prob_nums:
+            ref_num = None
     if ref_num is not None:
         asserted = False
         bare = False

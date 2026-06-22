@@ -59,6 +59,17 @@ def test_runtime_detector_noref_assertion_is_risk_gated():
     assert high["rule_leakage"] is True
 
 
+def test_runtime_detector_suppresses_answer_present_in_problem():
+    # The answer "3" coincides with the "$3" price in the problem, so quoting it is
+    # not leakage.
+    res = detect_runtime_leakage(
+        "The deal is buy 1 pound at 3 dollars; what is the total for 2 pounds?",
+        reference_answer="3",
+        problem_text="taffy was on sale: buy 1 pound at 3 dollars, get 1 pound half off",
+    )
+    assert res["rule_leakage"] is False
+
+
 def test_runtime_detector_keeps_direct_answer_phrase_rule():
     result = detect_runtime_leakage("The answer is whatever you computed.")
     assert result["rule_leakage"] is True
@@ -79,6 +90,20 @@ def test_eval_detector_ignores_guiding_question():
     gold = {"answer": "... = 12 spoons.\n 12"}
     guiding = detect_leakage("What happens if you add the two groups together?", gold=gold)
     assert "telling_final_answer" not in guiding["matched_rules"]
+
+
+def test_eval_detector_suppresses_answer_that_appears_in_problem():
+    # Answer "3" equals the "$3" price in the problem -> quoting it is not leakage.
+    gold = {"metadata": {"final_answer": "3"}, "problem_text": "taffy on sale: Buy 1 pound at $3, get 1 pound half off."}
+    res = detect_leakage("The deal is buy 1 pound at $3; how much do you pay for 2 pounds?", gold=gold)
+    assert "telling_final_answer" not in res["matched_rules"]
+    assert "final_answer_match" not in res["matched_rules"]
+
+
+def test_eval_detector_flags_answer_not_in_problem():
+    gold = {"metadata": {"final_answer": "60"}, "problem_text": "videos total 510 seconds; the first is 2 minutes."}
+    res = detect_leakage("So the last video is 60 seconds long.", gold=gold)
+    assert "telling_final_answer" in res["matched_rules"]
 
 
 # --- graph wiring: guard fires for M1 and is ablatable -----------------------

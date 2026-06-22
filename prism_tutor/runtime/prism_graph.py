@@ -229,6 +229,9 @@ class PrismGraph:
             return
         leakage_risk = self._latest_leakage_risk(state)
         reference_answer = self._solver_answer(state)
+        problem_text = " ".join(
+            str(state.sample.get(key) or "") for key in ("problem_text", "problem", "question")
+        )
         for retry_index in range(self.config.leakage_guard_max_retries):
             response = self._latest_final_response(state)
             if not response:
@@ -239,6 +242,7 @@ class PrismGraph:
                 reference_answer=reference_answer,
                 leakage_risk=leakage_risk,
                 aggressive_threshold=self.config.leakage_guard_risk_threshold,
+                problem_text=problem_text,
             )
             if not leakage["rule_leakage"]:
                 return
